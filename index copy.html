@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aventura Nárnia 3D</title>
+
+  <!-- Tailwind CSS (Estilos) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Three.js (Motor 3D) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel (Compilador de JSX no navegador) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Estilos Adicionais de Animação -->
+  <style>
+    .animate-in {
+      animation-duration: 0.3s;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .zoom-in {
+      animation-name: zoomIn;
+    }
+
+    .slide-in-from-right {
+      animation-name: slideInRight;
+    }
+
+    @keyframes zoomIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes slideInRight {
+      from {
+        opacity: 0;
+        transform: translateX(40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Previne o scroll acidental na página inteira ao arrastar a câmara */
+    body {
+      margin: 0;
+      overflow: hidden;
+      touch-action: none;
+      background-color: #0f172a;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- ÍCONES SVG SUBSTITUTOS (Offline) ---
+    const Icon = ({ children, size = 24, className = "", fill = "none" }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+    );
+
+    const Play = (p) => <Icon {...p} fill={p.fill || "none"}><polygon points="5 3 19 12 5 21 5 3"></polygon></Icon>;
+    const Pause = (p) => <Icon {...p} fill={p.fill || "none"}><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></Icon>;
+    const Square = (p) => <Icon {...p} fill={p.fill || "none"}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
+    const RotateCcw = (p) => <Icon {...p}><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></Icon>;
+    const RefreshCw = (p) => <Icon {...p}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></Icon>;
+    const CheckCircle = (p) => <Icon {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>;
+    const XCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></Icon>;
+    const AlertTriangle = (p) => <Icon {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></Icon>;
+    const Dices = (p) => <Icon {...p}><rect x="2" y="10" width="10" height="10" rx="2" ry="2"></rect><rect x="12" y="2" width="10" height="10" rx="2" ry="2"></rect><path d="M6 14h.01"></path><path d="M10 14h.01"></path><path d="M6 18h.01"></path><path d="M10 18h.01"></path><path d="M16 6h.01"></path><path d="M20 6h.01"></path><path d="M16 10h.01"></path><path d="M20 10h.01"></path></Icon>;
+    const Camera = (p) => <Icon {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></Icon>;
+    const Eye = (p) => <Icon {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></Icon>;
+    const EyeOff = (p) => <Icon {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></Icon>;
+    const MapIcon = (p) => <Icon {...p}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></Icon>;
+    const User = (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></Icon>;
+    const MousePointer2 = (p) => <Icon {...p}><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"></path></Icon>;
+
+    // --- BANCO DE PERGUNTAS ---
+    const QUESTIONS = [
+      { text: "Há 12 ovos na cartela.", answer: "contagem" },
+      { text: "A bicicleta tem 2 rodas.", answer: "contagem" },
+      { text: "A minha gata teve 4 filhotes.", answer: "contagem" },
+      { text: "A palavra 'escola' tem 6 letras.", answer: "contagem" },
+      { text: "Comprei 5 pães na padaria.", answer: "contagem" },
+      { text: "Existem 30 alunos na nossa sala.", answer: "contagem" },
+      { text: "A aranha possui 8 patas.", answer: "contagem" },
+      { text: "Ganhei 3 cadernos novos.", answer: "contagem" },
+      { text: "Faltam 10 dias para as férias.", answer: "contagem" },
+      { text: "O relógio tem 3 ponteiros.", answer: "contagem" },
+      { text: "Fui o 1º aluno a terminar o teste.", answer: "ordenacao" },
+      { text: "O consultório fica no 3º andar do prédio.", answer: "ordenacao" },
+      { text: "Ele é o 2º filho da família.", answer: "ordenacao" },
+      { text: "A minha equipa ficou em 4º lugar no torneio.", answer: "ordenacao" },
+      { text: "Sentei-me na 3ª fila do cinema.", answer: "ordenacao" },
+      { text: "Hoje é o 5º dia da semana.", answer: "ordenacao" },
+      { text: "Moro na 10ª casa da rua.", answer: "ordenacao" },
+      { text: "Este é o meu 2º par de sapatilhas.", answer: "ordenacao" },
+      { text: "Fiquei em 8º na corrida de sacos.", answer: "ordenacao" },
+      { text: "Esta é a 1ª vez que venho aqui.", answer: "ordenacao" },
+      { text: "A garrafa contém 2 litros de água.", answer: "medida" },
+      { text: "O pacote de feijão pesa 1 kg.", answer: "medida" },
+      { text: "A viagem até à praia durou 4 horas.", answer: "medida" },
+      { text: "A temperatura máxima hoje será de 30 graus.", answer: "medida" },
+      { text: "O muro da escola tem 3 metros de altura.", answer: "medida" },
+      { text: "Comprei 500 gramas de queijo.", answer: "medida" },
+      { text: "O meu lápis tem 15 centímetros.", answer: "medida" },
+      { text: "O campo tem 20 metros de comprimento.", answer: "medida" },
+      { text: "Fiz um bolo e usei 2 chávenas de farinha.", answer: "medida" },
+      { text: "Fiquei 30 minutos na fila da cantina.", answer: "medida" },
+      { text: "O código postal da minha rua é 1234-000.", answer: "codigo" },
+      { text: "O meu número de telefone é 91234-5678.", answer: "codigo" },
+      { text: "A matrícula do carro do meu pai é XY-98-76.", answer: "codigo" },
+      { text: "O código de barras do produto é 7891011.", answer: "codigo" },
+      { text: "O autocarro que vai para o centro é a carreira 478.", answer: "codigo" },
+      { text: "A password do Wi-Fi é 2024abc.", answer: "codigo" },
+      { text: "Moro na porta número 150.", answer: "codigo" },
+      { text: "O meu Cartão de Cidadão é 12345678.", answer: "codigo" },
+      { text: "O canal de desenhos animados é o 45.", answer: "codigo" },
+      { text: "O número de estudante é 2026001.", answer: "codigo" },
+    ];
+
+    const TRACK_LENGTH = 30;
+
+    const SPECIAL_TILES = {
+      5: { type: 'advance', value: 2, text: "Encontraste um atalho! Avança 2 casas." },
+      9: { type: 'back', value: -3, text: "Escorregaste na lama! Recua 3 casas." },
+      14: { type: 'advance', value: 3, text: "Botas mágicas! Avança 3 casas." },
+      19: { type: 'back', value: -4, text: "Perdeste-te na floresta! Recua 4 casas." },
+      24: { type: 'reset', value: 0, text: "Caíste num buraco! Volta ao INÍCIO." },
+      27: { type: 'advance', value: 2, text: "Vento favorável! Avança 2 casas." },
+    };
+
+    // --- PERSONAGENS DISPONÍVEIS ---
+    const CHARACTERS = {
+      ripchip: { id: 'ripchip', name: 'Ripchip (Rato)', icon: '🐭', color: '#dc2626' },
+      topeira: { id: 'topeira', name: 'Topeira', icon: '🐾', color: '#78350f' },
+      anao: { id: 'anao', name: 'Anão (Trumpkin)', icon: '🧔', color: '#ea580c' },
+      cavalo: { id: 'cavalo', name: 'Cavalo (Bri)', icon: '🐴', color: '#8b4513' },
+      coruja: { id: 'coruja', name: 'Coruja (Plumante)', icon: '🦉', color: '#475569' },
+      castor: { id: 'castor', name: 'Sr. Castor', icon: '🦫', color: '#92400e' },
+      fauno: { id: 'fauno', name: 'Fauno (Tumnus)', icon: '🐐', color: '#16a34a' },
+      centauro: { id: 'centauro', name: 'Centauro', icon: '🐎', color: '#a16207' },
+      leao: { id: 'leao', name: 'Leão (Aslan)', icon: '🦁', color: '#fbbf24' },
+      feiticeira: { id: 'feiticeira', name: 'Feiticeira Branca', icon: '🧙‍♀️', color: '#38bdf8' }
+    };
+
+    function App() {
+      const mountRef = useRef(null);
+
+      // Estados em React
+      const [gameState, setGameState] = useState('select_p1'); // select_p1, select_p2, start, question, dice, event, end
+      const [p1Char, setP1Char] = useState(null);
+      const [p2Char, setP2Char] = useState(null);
+
+      const [player1Pos, setPlayer1Pos] = useState(0);
+      const [player2Pos, setPlayer2Pos] = useState(0);
+      const [currentPlayer, setCurrentPlayer] = useState(1);
+      const [currentQuestion, setCurrentQuestion] = useState(null);
+      const [feedback, setFeedback] = useState(null);
+      const [specialEvent, setSpecialEvent] = useState(null);
+      const [winner, setWinner] = useState(null);
+      const [diceValue, setDiceValue] = useState(1);
+      const [isRolling, setIsRolling] = useState(false);
+
+      const [cameraView, setCameraView] = useState('thirdPerson');
+      const [isQuestionMinimized, setIsQuestionMinimized] = useState(false);
+      const [isPaused, setIsPaused] = useState(false);
+      const [timeLeft, setTimeLeft] = useState(20);
+
+      // Refs de sincronização com o Three.js
+      const targetPositions = useRef([0, 0]);
+      const cameraTargetPlayer = useRef(1);
+      const cameraViewRef = useRef('thirdPerson');
+      const reactionRef = useRef({ player: null, type: null, time: 0 });
+      const p1CharRef = useRef('ripchip');
+      const p2CharRef = useRef('topeira');
+      const isThreeReady = useRef(false);
+      const isAnimating = useRef([false, false]);
+
+      // Inicializa o Motor 3D (Apenas quando sai da seleção de personagens)
+      useEffect(() => {
+        if (gameState === 'select_p1' || gameState === 'select_p2') return;
+
+        let isMounted = true;
+        let scene, camera, renderer, animationId;
+        let p1Mesh, p2Mesh, tileCoords = [];
+        let currentLookTarget = null;
+
+        // Controlo de Câmara
+        let currentSpherical = null;
+        let targetSpherical = null;
+        let prevCameraView = 'thirdPerson';
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        const initThree = () => {
+          if (!isMounted || !mountRef.current || isThreeReady.current) return;
+          const THREE = window.THREE;
+
+          currentLookTarget = new THREE.Vector3(0, 0, 0);
+          currentSpherical = new THREE.Spherical(14, Math.PI / 3, 0);
+          targetSpherical = new THREE.Spherical(14, Math.PI / 3, 0);
+
+          // Cenário Base
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x38bdf8);
+          scene.fog = new THREE.Fog(0x38bdf8, 50, 180);
+
+          camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+          renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          mountRef.current.innerHTML = '';
+          mountRef.current.appendChild(renderer.domElement);
+
+          const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.7);
+          hemiLight.position.set(0, 200, 0);
+          scene.add(hemiLight);
+
+          const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+          dirLight.position.set(60, 120, 50);
+          dirLight.castShadow = true;
+          dirLight.shadow.mapSize.width = 2048;
+          dirLight.shadow.mapSize.height = 2048;
+          dirLight.shadow.camera.top = 100; dirLight.shadow.camera.bottom = -100;
+          dirLight.shadow.camera.left = -100; dirLight.shadow.camera.right = 100;
+          scene.add(dirLight);
+
+          // Chão (Relva com material Standard)
+          const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(350, 350),
+            new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 1, metalness: 0 })
+          );
+          ground.rotation.x = -Math.PI / 2;
+          ground.receiveShadow = true;
+          scene.add(ground);
+
+          // Lago
+          const lake = new THREE.Mesh(
+            new THREE.CircleGeometry(30, 64),
+            new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.1, metalness: 0.2 })
+          );
+          lake.rotation.x = -Math.PI / 2;
+          lake.position.set(-15, 0.1, -45);
+          scene.add(lake);
+
+          // Trilha Sinuosa
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0, 15), new THREE.Vector3(12, 0, 0), new THREE.Vector3(30, 0, -5),
+            new THREE.Vector3(25, 0, -25), new THREE.Vector3(0, 0, -35), new THREE.Vector3(-25, 0, -15),
+            new THREE.Vector3(-35, 0, 15), new THREE.Vector3(-15, 0, 35), new THREE.Vector3(15, 0, 40),
+            new THREE.Vector3(45, 0, 20), new THREE.Vector3(50, 0, -20), new THREE.Vector3(30, 0, -55),
+          ]);
+          tileCoords = curve.getPoints(TRACK_LENGTH);
+
+          const createTileTexture = (num, type) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = type === 'reset' ? '#ef4444' : type === 'advance' ? '#4ade80' : type === 'back' ? '#fb923c' : '#d97706';
+            ctx.fillRect(0, 0, 128, 128);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 55px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(num, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+          };
+
+          const tileGeo = new THREE.CylinderGeometry(2.8, 2.8, 0.6, 32);
+          for (let i = 0; i <= TRACK_LENGTH; i++) {
+            const isSpecial = SPECIAL_TILES[i];
+            const type = isSpecial ? isSpecial.type : 'normal';
+            const label = i === 0 ? "INÍCIO" : i === TRACK_LENGTH ? "FIM" : i.toString();
+
+            const sideMat = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.9 });
+            const topMat = new THREE.MeshStandardMaterial({ map: createTileTexture(label, type), roughness: 0.8 });
+
+            const tile = new THREE.Mesh(tileGeo, [sideMat, topMat, sideMat]);
+            tile.position.copy(tileCoords[i]);
+            tile.position.y = 0.3;
+            tile.receiveShadow = true;
+            tile.castShadow = true;
+            scene.add(tile);
+          }
+
+          // Elementos Decorativos Fofos
+          const createCuteTree = () => {
+            const tree = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 3, 12), new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 1 }));
+            trunk.position.y = 1.5; trunk.castShadow = true;
+
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
+            const leaf1 = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), leavesMat);
+            leaf1.position.set(0, 4, 0); leaf1.castShadow = true;
+            const leaf2 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), leavesMat);
+            leaf2.position.set(1.5, 3.2, 0.5); leaf2.castShadow = true;
+            const leaf3 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), leavesMat);
+            leaf3.position.set(-1.2, 3.5, -1); leaf3.castShadow = true;
+
+            tree.add(trunk, leaf1, leaf2, leaf3);
+            return tree;
+          };
+
+          const createBush = () => {
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.9 }));
+            bush.scale.set(1, 0.7, 1);
+            bush.position.y = 0.8;
+            bush.castShadow = true;
+            return bush;
+          };
+
+          for (let i = 0; i < 80; i++) {
+            const x = (Math.random() - 0.5) * 200;
+            const z = (Math.random() - 0.5) * 200;
+            if (!tileCoords.some(pt => pt.distanceTo(new THREE.Vector3(x, 0, z)) < 8)) {
+              const isBush = Math.random() > 0.6;
+              const prop = isBush ? createBush() : createCuteTree();
+              prop.position.set(x, 0, z);
+              const s = 0.5 + Math.random() * 0.6;
+              prop.scale.set(s, s, s);
+              scene.add(prop);
+            }
+          }
+
+          // --- GERADOR DE PERSONAGENS 3D (Estilo Peões Standee com retratos detalhados) ---
+          const drawCharacterPortrait = (ctx, id) => {
+            const W = 256, H = 256, cx = W / 2, cy = H / 2;
+            ctx.clearRect(0, 0, W, H);
+
+            // Fundo circular com gradiente
+            const charData = CHARACTERS[id] || CHARACTERS['ripchip'];
+            const bgGrad = ctx.createRadialGradient(cx, cy - 10, 20, cx, cy - 10, 110);
+            bgGrad.addColorStop(0, '#fff8ee');
+            bgGrad.addColorStop(1, charData.color + '44');
+            ctx.beginPath();
+            ctx.arc(cx, cy, 110, 0, Math.PI * 2);
+            ctx.fillStyle = bgGrad;
+            ctx.fill();
+
+            // Borda dourada
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#c8a44e';
+            ctx.stroke();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, 107, 0, Math.PI * 2);
+            ctx.clip();
+
+            switch (id) {
+              case 'ripchip': { // Ratinho guerreiro com armadura dourada
+                // Corpo
+                ctx.fillStyle = '#d4b8a0';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 30, 40, 50, 0, 0, Math.PI * 2); ctx.fill();
+                // Armadura dourada
+                ctx.fillStyle = '#daa520';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 40, 35, 35, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#c8960c';
+                ctx.fillRect(cx - 3, cy + 10, 6, 40);
+                // Cabeça
+                ctx.fillStyle = '#e0c8b0';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 30, 32, 30, 0, 0, Math.PI * 2); ctx.fill();
+                // Orelhas redondas
+                ctx.fillStyle = '#f0b8a8';
+                ctx.beginPath(); ctx.arc(cx - 28, cy - 50, 16, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 28, cy - 50, 16, 0, Math.PI * 2); ctx.fill();
+                // Olhos
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 10, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                // Brilho olhos
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 8, cy - 34, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 34, 2, 0, Math.PI * 2); ctx.fill();
+                // Nariz rosa
+                ctx.fillStyle = '#ff8888';
+                ctx.beginPath(); ctx.arc(cx, cy - 22, 4, 0, Math.PI * 2); ctx.fill();
+                // Espada
+                ctx.fillStyle = '#c0c0c0';
+                ctx.fillRect(cx + 35, cy - 40, 4, 50);
+                ctx.fillStyle = '#daa520';
+                ctx.fillRect(cx + 30, cy - 10, 14, 6);
+                // Sorriso
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cx, cy - 18, 8, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+                break;
+              }
+              case 'topeira': { // Toupeira marrom fofa
+                ctx.fillStyle = '#6b4226';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 20, 45, 55, 0, 0, Math.PI * 2); ctx.fill();
+                // Barriga clara
+                ctx.fillStyle = '#c8a882';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 35, 28, 30, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabeça
+                ctx.fillStyle = '#7a5230';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 30, 35, 28, 0, 0, Math.PI * 2); ctx.fill();
+                // Focinho
+                ctx.fillStyle = '#c8a882';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 18, 15, 12, 0, 0, Math.PI * 2); ctx.fill();
+                // Nariz grande rosa
+                ctx.fillStyle = '#ff6699';
+                ctx.beginPath(); ctx.arc(cx, cy - 20, 7, 0, Math.PI * 2); ctx.fill();
+                // Olhinhos pequenos
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 35, 4, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 35, 4, 0, Math.PI * 2); ctx.fill();
+                // Patinhas
+                ctx.fillStyle = '#5a3820';
+                ctx.beginPath(); ctx.ellipse(cx - 25, cy + 70, 12, 8, -0.3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 25, cy + 70, 12, 8, 0.3, 0, Math.PI * 2); ctx.fill();
+                // Cachecol azul
+                ctx.fillStyle = '#4488cc';
+                ctx.beginPath();
+                ctx.moveTo(cx - 30, cy - 5); ctx.quadraticCurveTo(cx, cy + 5, cx + 30, cy - 5);
+                ctx.lineTo(cx + 25, cy + 5); ctx.quadraticCurveTo(cx, cy + 12, cx - 25, cy + 5);
+                ctx.fill();
+                break;
+              }
+              case 'anao': { // Anão com barba ruiva e machado
+                ctx.fillStyle = '#8b6914';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 30, 42, 50, 0, 0, Math.PI * 2); ctx.fill();
+                // Armadura
+                ctx.fillStyle = '#8b7355';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 25, 38, 40, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#a08060';
+                ctx.fillRect(cx - 5, cy - 5, 10, 60);
+                // Cabeça
+                ctx.fillStyle = '#f0c8a0';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 28, 30, 28, 0, 0, Math.PI * 2); ctx.fill();
+                // Barba ruiva enorme
+                ctx.fillStyle = '#d4650a';
+                ctx.beginPath();
+                ctx.moveTo(cx - 28, cy - 15);
+                ctx.quadraticCurveTo(cx - 35, cy + 30, cx - 10, cy + 40);
+                ctx.lineTo(cx + 10, cy + 40);
+                ctx.quadraticCurveTo(cx + 35, cy + 30, cx + 28, cy - 15);
+                ctx.fill();
+                // Olhos
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 32, 4, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 10, cy - 32, 4, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 8, cy - 34, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 34, 1.5, 0, Math.PI * 2); ctx.fill();
+                // Nariz
+                ctx.fillStyle = '#e0a880';
+                ctx.beginPath(); ctx.arc(cx, cy - 22, 5, 0, Math.PI * 2); ctx.fill();
+                // Capacete
+                ctx.fillStyle = '#777';
+                ctx.beginPath();
+                ctx.arc(cx, cy - 50, 28, Math.PI, 0);
+                ctx.fill();
+                // Machado
+                ctx.fillStyle = '#888';
+                ctx.fillRect(cx + 38, cy - 45, 4, 60);
+                ctx.fillStyle = '#aaa';
+                ctx.beginPath();
+                ctx.moveTo(cx + 35, cy - 45); ctx.lineTo(cx + 55, cy - 35); ctx.lineTo(cx + 35, cy - 25);
+                ctx.fill();
+                break;
+              }
+              case 'cavalo': { // Cavalo castanho nobre
+                ctx.fillStyle = '#6b3a1f';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 20, 45, 50, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabeça de cavalo (mais longa)
+                ctx.fillStyle = '#7a4422';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 25, 28, 38, 0, 0, Math.PI * 2); ctx.fill();
+                // Focinho
+                ctx.fillStyle = '#c8a882';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 2, 16, 14, 0, 0, Math.PI * 2); ctx.fill();
+                // Narinas
+                ctx.fillStyle = '#444';
+                ctx.beginPath(); ctx.arc(cx - 5, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 5, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
+                // Olhos grandes expressivos
+                ctx.fillStyle = '#331a00';
+                ctx.beginPath(); ctx.ellipse(cx - 14, cy - 35, 6, 8, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 14, cy - 35, 6, 8, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 37, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 16, cy - 37, 2.5, 0, Math.PI * 2); ctx.fill();
+                // Crina
+                ctx.fillStyle = '#3a1a08';
+                for (let i = 0; i < 8; i++) {
+                  ctx.beginPath();
+                  ctx.ellipse(cx + (i - 4) * 5, cy - 60 - Math.sin(i) * 5, 8, 14, (i - 4) * 0.15, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+                // Orelhas
+                ctx.fillStyle = '#6b3a1f';
+                ctx.beginPath(); ctx.ellipse(cx - 18, cy - 62, 8, 14, -0.3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 18, cy - 62, 8, 14, 0.3, 0, Math.PI * 2); ctx.fill();
+                break;
+              }
+              case 'coruja': { // Coruja sábia
+                ctx.fillStyle = '#8b7355';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 15, 40, 55, 0, 0, Math.PI * 2); ctx.fill();
+                // Barriga com penas
+                ctx.fillStyle = '#d4c8a0';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 25, 28, 35, 0, 0, Math.PI * 2); ctx.fill();
+                // Padrão de penas
+                for (let i = 0; i < 5; i++) {
+                  ctx.strokeStyle = '#a08060';
+                  ctx.lineWidth = 1;
+                  ctx.beginPath();
+                  ctx.arc(cx, cy + 15 + i * 10, 20 - i * 2, 0.2 * Math.PI, 0.8 * Math.PI);
+                  ctx.stroke();
+                }
+                // Cabeça
+                ctx.fillStyle = '#7a6644';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 30, 36, 30, 0, 0, Math.PI * 2); ctx.fill();
+                // Disco facial
+                ctx.fillStyle = '#e8dcc0';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 30, 18, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 30, 18, 0, Math.PI * 2); ctx.fill();
+                // Olhos grandes amarelos
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 32, 10, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 32, 10, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 34, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 14, cy - 34, 2, 0, Math.PI * 2); ctx.fill();
+                // Bico
+                ctx.fillStyle = '#e8a020';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 24); ctx.lineTo(cx - 6, cy - 18); ctx.lineTo(cx + 6, cy - 18);
+                ctx.fill();
+                // Tufos/sobrancelhas
+                ctx.fillStyle = '#5a4a30';
+                ctx.beginPath(); ctx.ellipse(cx - 18, cy - 52, 10, 6, -0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 18, cy - 52, 10, 6, 0.5, 0, Math.PI * 2); ctx.fill();
+                // Asas
+                ctx.fillStyle = '#6b5533';
+                ctx.beginPath(); ctx.ellipse(cx - 40, cy + 5, 15, 35, 0.2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 40, cy + 5, 15, 35, -0.2, 0, Math.PI * 2); ctx.fill();
+                break;
+              }
+              case 'castor': { // Castor com cachecol
+                ctx.fillStyle = '#7a5230';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 20, 42, 50, 0, 0, Math.PI * 2); ctx.fill();
+                // Barriga
+                ctx.fillStyle = '#c8a872';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 30, 28, 30, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabeça
+                ctx.fillStyle = '#8b6340';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 25, 32, 28, 0, 0, Math.PI * 2); ctx.fill();
+                // Bochechas
+                ctx.fillStyle = '#c8a872';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 12, 22, 14, 0, 0, Math.PI * 2); ctx.fill();
+                // Dentes
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(cx - 5, cy - 8, 4, 8);
+                ctx.fillRect(cx + 1, cy - 8, 4, 8);
+                // Olhos
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 30, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 30, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 32, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 14, cy - 32, 2, 0, Math.PI * 2); ctx.fill();
+                // Nariz
+                ctx.fillStyle = '#333';
+                ctx.beginPath(); ctx.arc(cx, cy - 16, 5, 0, Math.PI * 2); ctx.fill();
+                // Orelhas pequenas
+                ctx.fillStyle = '#6b4a28';
+                ctx.beginPath(); ctx.arc(cx - 28, cy - 42, 8, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 28, cy - 42, 8, 0, Math.PI * 2); ctx.fill();
+                // Cachecol azul
+                ctx.fillStyle = '#3366bb';
+                ctx.beginPath();
+                ctx.moveTo(cx - 35, cy - 5); ctx.quadraticCurveTo(cx, cy + 8, cx + 35, cy - 5);
+                ctx.lineTo(cx + 30, cy + 8); ctx.quadraticCurveTo(cx, cy + 18, cx - 30, cy + 8);
+                ctx.fill();
+                // Ponta do cachecol
+                ctx.fillRect(cx + 20, cy + 2, 8, 30);
+                break;
+              }
+              case 'fauno': { // Fauno Tumnus com cachecol verde
+                // Pernas de cabra
+                ctx.fillStyle = '#8b6340';
+                ctx.fillRect(cx - 18, cy + 40, 12, 35);
+                ctx.fillRect(cx + 6, cy + 40, 12, 35);
+                ctx.fillStyle = '#3a2010';
+                ctx.beginPath(); ctx.ellipse(cx - 12, cy + 78, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 12, cy + 78, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+                // Tronco
+                ctx.fillStyle = '#deb887';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 15, 30, 35, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabeça
+                ctx.fillStyle = '#f0c8a0';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 30, 28, 26, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabelo castanho encaracolado
+                ctx.fillStyle = '#5a3a1a';
+                for (let i = 0; i < 7; i++) {
+                  ctx.beginPath();
+                  ctx.arc(cx + (i - 3) * 9, cy - 52, 10, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+                // Orelhas pontiagudas
+                ctx.fillStyle = '#f0c8a0';
+                ctx.beginPath();
+                ctx.moveTo(cx - 30, cy - 35); ctx.lineTo(cx - 42, cy - 50); ctx.lineTo(cx - 26, cy - 42);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx + 30, cy - 35); ctx.lineTo(cx + 42, cy - 50); ctx.lineTo(cx + 26, cy - 42);
+                ctx.fill();
+                // Chifrinhos de cabra
+                ctx.fillStyle = '#a08060';
+                ctx.beginPath();
+                ctx.moveTo(cx - 15, cy - 55); ctx.quadraticCurveTo(cx - 20, cy - 75, cx - 8, cy - 72);
+                ctx.lineTo(cx - 12, cy - 55);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx + 15, cy - 55); ctx.quadraticCurveTo(cx + 20, cy - 75, cx + 8, cy - 72);
+                ctx.lineTo(cx + 12, cy - 55);
+                ctx.fill();
+                // Olhos
+                ctx.fillStyle = '#3a6030';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 10, cy - 32, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 32, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 10, cy - 32, 3, 0, Math.PI * 2); ctx.fill();
+                // Nariz
+                ctx.fillStyle = '#dab090';
+                ctx.beginPath(); ctx.arc(cx, cy - 22, 4, 0, Math.PI * 2); ctx.fill();
+                // Sorriso
+                ctx.strokeStyle = '#885533';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cx, cy - 16, 8, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+                // Cachecol verde
+                ctx.fillStyle = '#228844';
+                ctx.beginPath();
+                ctx.moveTo(cx - 32, cy - 5); ctx.quadraticCurveTo(cx, cy + 8, cx + 32, cy - 5);
+                ctx.lineTo(cx + 28, cy + 5); ctx.quadraticCurveTo(cx, cy + 15, cx - 28, cy + 5);
+                ctx.fill();
+                ctx.fillRect(cx - 28, cy + 2, 8, 25);
+                break;
+              }
+              case 'centauro': { // Metade homem metade cavalo com arco
+                // Corpo de cavalo
+                ctx.fillStyle = '#7a4422';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 35, 45, 28, 0, 0, Math.PI * 2); ctx.fill();
+                // Pernas
+                ctx.fillRect(cx - 30, cy + 55, 10, 25);
+                ctx.fillRect(cx - 10, cy + 55, 10, 25);
+                ctx.fillRect(cx + 5, cy + 55, 10, 25);
+                ctx.fillRect(cx + 20, cy + 55, 10, 25);
+                // Cascos
+                ctx.fillStyle = '#333';
+                ctx.fillRect(cx - 32, cy + 78, 14, 5);
+                ctx.fillRect(cx - 12, cy + 78, 14, 5);
+                ctx.fillRect(cx + 3, cy + 78, 14, 5);
+                ctx.fillRect(cx + 18, cy + 78, 14, 5);
+                // Tronco humano
+                ctx.fillStyle = '#deb887';
+                ctx.beginPath(); ctx.ellipse(cx, cy, 25, 35, 0, Math.PI, 0); ctx.fill();
+                ctx.fillStyle = '#c8a060';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 5, 22, 25, 0, Math.PI, 0); ctx.fill();
+                // Cabeça
+                ctx.fillStyle = '#deb887';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 40, 22, 22, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabelo escuro
+                ctx.fillStyle = '#3a2010';
+                ctx.beginPath();
+                ctx.arc(cx, cy - 55, 20, Math.PI, 0);
+                ctx.fill();
+                // Olhos
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(cx - 8, cy - 42, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 8, cy - 42, 3, 0, Math.PI * 2); ctx.fill();
+                // Arco
+                ctx.strokeStyle = '#8b6914';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cx + 40, cy - 20, 30, -0.7 * Math.PI, 0.7 * Math.PI);
+                ctx.stroke();
+                // corda
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx + 40 + 30 * Math.cos(-0.7 * Math.PI), cy - 20 + 30 * Math.sin(-0.7 * Math.PI));
+                ctx.lineTo(cx + 40 + 30 * Math.cos(0.7 * Math.PI), cy - 20 + 30 * Math.sin(0.7 * Math.PI));
+                ctx.stroke();
+                break;
+              }
+              case 'leao': { // Leão Aslan majestoso
+                // Corpo
+                ctx.fillStyle = '#daa520';
+                ctx.beginPath(); ctx.ellipse(cx, cy + 25, 40, 45, 0, 0, Math.PI * 2); ctx.fill();
+                // Juba dourada majestosa
+                ctx.fillStyle = '#c8860a';
+                for (let a = 0; a < Math.PI * 2; a += 0.3) {
+                  ctx.beginPath();
+                  ctx.ellipse(cx + Math.cos(a) * 35, cy - 20 + Math.sin(a) * 35, 16, 22, a, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+                // Cabeça
+                ctx.fillStyle = '#eaaa30';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 20, 30, 28, 0, 0, Math.PI * 2); ctx.fill();
+                // Focinho
+                ctx.fillStyle = '#f0d080';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 8, 16, 12, 0, 0, Math.PI * 2); ctx.fill();
+                // Nariz
+                ctx.fillStyle = '#8b4513';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 12); ctx.lineTo(cx - 6, cy - 6); ctx.lineTo(cx + 6, cy - 6);
+                ctx.fill();
+                // Olhos sábios
+                ctx.fillStyle = '#8b6508';
+                ctx.beginPath(); ctx.ellipse(cx - 12, cy - 25, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 12, cy - 25, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#111';
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 25, 3.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 25, 3.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx - 10, cy - 27, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 14, cy - 27, 1.5, 0, Math.PI * 2); ctx.fill();
+                // Boca / sorriso nobre
+                ctx.strokeStyle = '#8b5a2b';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cx, cy - 4, 6, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+                break;
+              }
+              case 'feiticeira': { // Feiticeira Branca - Rainha do Gelo
+                // Vestido azul gelo
+                const dressGrad = ctx.createLinearGradient(cx, cy - 10, cx, cy + 80);
+                dressGrad.addColorStop(0, '#b8d8f0');
+                dressGrad.addColorStop(1, '#e8f4ff');
+                ctx.fillStyle = dressGrad;
+                ctx.beginPath();
+                ctx.moveTo(cx - 15, cy - 5);
+                ctx.quadraticCurveTo(cx - 50, cy + 80, cx - 40, cy + 85);
+                ctx.lineTo(cx + 40, cy + 85);
+                ctx.quadraticCurveTo(cx + 50, cy + 80, cx + 15, cy - 5);
+                ctx.fill();
+                // Detalhes do vestido (flocos)
+                ctx.fillStyle = '#fff';
+                for (let i = 0; i < 6; i++) {
+                  const sx = cx + (Math.random() - 0.5) * 50;
+                  const sy = cy + 20 + i * 10;
+                  ctx.font = '10px sans-serif';
+                  ctx.fillText('❄', sx, sy);
+                }
+                // Rosto
+                ctx.fillStyle = '#f0e8f0';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 30, 24, 26, 0, 0, Math.PI * 2); ctx.fill();
+                // Cabelo branco/prateado
+                ctx.fillStyle = '#d0d8e0';
+                ctx.beginPath();
+                ctx.moveTo(cx - 28, cy - 25);
+                ctx.quadraticCurveTo(cx - 30, cy - 65, cx, cy - 58);
+                ctx.quadraticCurveTo(cx + 30, cy - 65, cx + 28, cy - 25);
+                ctx.fill();
+                // Mechas laterais
+                ctx.beginPath();
+                ctx.moveTo(cx - 26, cy - 30);
+                ctx.quadraticCurveTo(cx - 38, cy + 10, cx - 30, cy + 20);
+                ctx.lineTo(cx - 22, cy + 15);
+                ctx.quadraticCurveTo(cx - 30, cy + 5, cx - 22, cy - 25);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx + 26, cy - 30);
+                ctx.quadraticCurveTo(cx + 38, cy + 10, cx + 30, cy + 20);
+                ctx.lineTo(cx + 22, cy + 15);
+                ctx.quadraticCurveTo(cx + 30, cy + 5, cx + 22, cy - 25);
+                ctx.fill();
+                // Coroa de gelo
+                ctx.fillStyle = '#a8d8f8';
+                ctx.beginPath();
+                ctx.moveTo(cx - 18, cy - 55); ctx.lineTo(cx - 14, cy - 72); ctx.lineTo(cx - 8, cy - 60);
+                ctx.lineTo(cx, cy - 78); ctx.lineTo(cx + 8, cy - 60);
+                ctx.lineTo(cx + 14, cy - 72); ctx.lineTo(cx + 18, cy - 55);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#78b8e8';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                // Cristais na coroa
+                ctx.fillStyle = '#d0f0ff';
+                ctx.beginPath(); ctx.arc(cx, cy - 70, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx - 12, cy - 63, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 12, cy - 63, 2, 0, Math.PI * 2); ctx.fill();
+                // Olhos
+                ctx.fillStyle = '#6090c0';
+                ctx.beginPath(); ctx.ellipse(cx - 8, cy - 32, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 8, cy - 32, 4, 5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#1a3050';
+                ctx.beginPath(); ctx.arc(cx - 8, cy - 32, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 8, cy - 32, 2.5, 0, Math.PI * 2); ctx.fill();
+                // Lábios
+                ctx.fillStyle = '#c080a0';
+                ctx.beginPath(); ctx.ellipse(cx, cy - 18, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+                // Cetro de gelo
+                ctx.fillStyle = '#a0c8e0';
+                ctx.fillRect(cx + 32, cy - 50, 4, 80);
+                // Cristal no topo do cetro
+                ctx.fillStyle = '#d0f0ff';
+                ctx.beginPath();
+                ctx.moveTo(cx + 34, cy - 50); ctx.lineTo(cx + 28, cy - 62); ctx.lineTo(cx + 34, cy - 70);
+                ctx.lineTo(cx + 40, cy - 62);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#88c8f0';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                break;
+              }
+              default: {
+                ctx.font = '120px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(charData.icon, cx, cy);
+              }
+            }
+            ctx.restore();
+          };
+
+          const buildCharacterStandee = (id) => {
+            const charData = CHARACTERS[id] || CHARACTERS['ripchip'];
+            const group = new THREE.Group();
+
+            const baseGeo = new THREE.CylinderGeometry(1.4, 1.6, 0.4, 32);
+            const baseMat = new THREE.MeshStandardMaterial({ color: charData.color, roughness: 0.8, metalness: 0.2 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = 0.2;
+            base.castShadow = true;
+            group.add(base);
+
+            const ringGeo = new THREE.TorusGeometry(1.45, 0.1, 16, 32);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.8, roughness: 0.2 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.y = 0.4;
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            drawCharacterPortrait(ctx, id);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(5, 5, 1);
+            sprite.position.y = 2.8;
+            group.add(sprite);
+
+            return group;
+          };
+
+          p1Mesh = buildCharacterStandee(p1CharRef.current);
+          p2Mesh = buildCharacterStandee(p2CharRef.current);
+
+          p1Mesh.position.copy(tileCoords[0]); p1Mesh.position.x -= 1.2;
+          p2Mesh.position.copy(tileCoords[0]); p2Mesh.position.x += 1.2;
+          scene.add(p1Mesh); scene.add(p2Mesh);
+
+          // --- EVENTOS DE RATO (CONTROLO DE CÂMARA LIVRE) ---
+          const onPointerDown = (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+            if (cameraViewRef.current !== 'free') setCameraView('free');
+          };
+          const onPointerMove = (e) => {
+            if (isDragging) {
+              const deltaX = e.clientX - previousMousePosition.x;
+              const deltaY = e.clientY - previousMousePosition.y;
+              targetSpherical.theta -= deltaX * 0.01;
+              targetSpherical.phi -= deltaY * 0.01;
+              targetSpherical.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, targetSpherical.phi));
+              previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+          };
+          const onPointerUp = () => { isDragging = false; };
+          const onWheel = (e) => {
+            e.preventDefault();
+            targetSpherical.radius += e.deltaY * 0.02;
+            targetSpherical.radius = Math.max(5, Math.min(80, targetSpherical.radius));
+            if (cameraViewRef.current !== 'free') setCameraView('free');
+          };
+
+          const canvasEl = renderer.domElement;
+          canvasEl.addEventListener('pointerdown', onPointerDown);
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+          canvasEl.addEventListener('wheel', onWheel, { passive: false });
+
+          isThreeReady.current = true;
+
+          // Loop de Animação
+          const renderLoop = () => {
+            animationId = requestAnimationFrame(renderLoop);
+
+            const updatePlayerVisual = (mesh, targetIndex, offset, playerNum) => {
+              const idx = Math.min(targetIndex, TRACK_LENGTH);
+              const targetPos = tileCoords[idx].clone();
+              targetPos.x += offset;
+
+              mesh.position.lerp(targetPos, 0.04);
+
+              const reaction = reactionRef.current;
+              let isReacting = false;
+
+              if (reaction.player === playerNum) {
+                const elapsed = Date.now() - reaction.time;
+                if (elapsed < 1500) {
+                  isReacting = true;
+                  const progress = elapsed / 1500;
+                  if (reaction.type === 'success') {
+                    mesh.position.y = Math.abs(Math.sin(progress * Math.PI)) * 5;
+                    mesh.rotation.y += 0.2;
+                  } else if (reaction.type === 'fail') {
+                    const squash = 1 - Math.sin(progress * Math.PI) * 0.5;
+                    mesh.scale.set(1 / squash, Math.max(0.2, squash), 1 / squash);
+                    mesh.rotation.z = Math.sin(progress * Math.PI * 10) * 0.3;
+                  }
+                }
+              }
+
+              if (!isReacting) {
+                mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+                mesh.rotation.z *= 0.8;
+
+                if (mesh.position.distanceTo(targetPos) > 0.5) {
+                  mesh.position.y = Math.abs(Math.sin(Date.now() * 0.008)) * 2;
+                  mesh.rotation.y = Math.atan2(targetPos.x - mesh.position.x, targetPos.z - mesh.position.z);
+                } else {
+                  mesh.position.y = 0;
+                  if (idx < TRACK_LENGTH) {
+                    const nextTile = tileCoords[idx + 1];
+                    mesh.rotation.y = Math.atan2(nextTile.x - mesh.position.x, nextTile.z - mesh.position.z);
+                  }
+                }
+              }
+            };
+
+            updatePlayerVisual(p1Mesh, targetPositions.current[0], -1.2, 1);
+            updatePlayerVisual(p2Mesh, targetPositions.current[1], 1.2, 2);
+
+            // --- ATUALIZAÇÃO DA CÂMARA ---
+            const activeIdx = cameraTargetPlayer.current === 1 ? targetPositions.current[0] : targetPositions.current[1];
+            const activePos = tileCoords[Math.min(activeIdx, TRACK_LENGTH)];
+            const nextIdx = Math.min(activeIdx + 1, TRACK_LENGTH);
+            const dir = new THREE.Vector3().subVectors(tileCoords[nextIdx], activePos).normalize();
+            if (dir.lengthSq() < 0.1) dir.set(0, 0, 1);
+
+            // Afastar câmara durante animação de movimento
+            const isMoving = isAnimating.current[0] || isAnimating.current[1];
+            if (isMoving && cameraViewRef.current !== 'free' && cameraViewRef.current !== 'topDown' && cameraViewRef.current !== 'firstPerson') {
+              targetSpherical.radius = Math.max(targetSpherical.radius, 35);
+              targetSpherical.phi = Math.min(targetSpherical.phi, Math.PI / 3.5);
+            }
+
+            if (prevCameraView !== cameraViewRef.current) {
+              prevCameraView = cameraViewRef.current;
+              switch (cameraViewRef.current) {
+                case 'thirdPerson':
+                  targetSpherical.radius = 18; targetSpherical.phi = Math.PI / 3;
+                  targetSpherical.theta = Math.atan2(-dir.x, -dir.z);
+                  break;
+                case 'secondPerson':
+                  targetSpherical.radius = 14; targetSpherical.phi = Math.PI / 2.5;
+                  targetSpherical.theta = Math.atan2(dir.x, dir.z);
+                  break;
+                case 'topDown':
+                  targetSpherical.radius = 60; targetSpherical.phi = 0.05;
+                  break;
+              }
+            }
+
+            let idealCamPos = new THREE.Vector3();
+            let idealLookTarget = new THREE.Vector3();
+
+            if (cameraViewRef.current === 'firstPerson') {
+              idealCamPos.copy(activePos).add(new THREE.Vector3(0, 6, 0));
+              idealLookTarget.copy(activePos).add(new THREE.Vector3(0, 6, 0)).add(dir.clone().multiplyScalar(20));
+              camera.position.lerp(idealCamPos, 0.1);
+            } else {
+              currentSpherical.radius += (targetSpherical.radius - currentSpherical.radius) * 0.1;
+              currentSpherical.phi += (targetSpherical.phi - currentSpherical.phi) * 0.1;
+
+              let diff = targetSpherical.theta - currentSpherical.theta;
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              currentSpherical.theta += diff * 0.1;
+
+              const offset = new THREE.Vector3().setFromSpherical(currentSpherical);
+              idealCamPos.copy(activePos).add(offset);
+              idealLookTarget.copy(activePos).add(new THREE.Vector3(0, 2, 0));
+
+              camera.position.copy(idealCamPos);
+            }
+
+            currentLookTarget.lerp(idealLookTarget, 0.1);
+            camera.lookAt(currentLookTarget);
+
+            renderer.render(scene, camera);
+          };
+
+          renderLoop();
+
+          const handleResize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+          };
+          window.addEventListener('resize', handleResize);
+
+          return () => {
+            window.removeEventListener('resize', handleResize);
+            canvasEl.removeEventListener('pointerdown', onPointerDown);
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            canvasEl.removeEventListener('wheel', onWheel);
+            cancelAnimationFrame(animationId);
+            renderer.dispose();
+          };
+        };
+
+        // Inicializar
+        initThree();
+
+        return () => { isMounted = false; };
+      }, [gameState === 'select_p1', gameState === 'select_p2']);
+
+      // Sincronizar React State com Refs
+      useEffect(() => {
+        if (!isAnimating.current[0]) targetPositions.current[0] = player1Pos;
+        if (!isAnimating.current[1]) targetPositions.current[1] = player2Pos;
+      }, [player1Pos, player2Pos]);
+      useEffect(() => { cameraTargetPlayer.current = currentPlayer; }, [currentPlayer]);
+      useEffect(() => { cameraViewRef.current = cameraView; }, [cameraView]);
+      useEffect(() => { p1CharRef.current = p1Char; p2CharRef.current = p2Char; }, [p1Char, p2Char]);
+
+      const selectCharacter = (id) => {
+        if (gameState === 'select_p1') {
+          p1CharRef.current = id;
+          setP1Char(id);
+          setGameState('select_p2');
+        } else if (gameState === 'select_p2') {
+          p2CharRef.current = id;
+          setP2Char(id);
+          setGameState('start');
+        }
+      };
+
+      const startGame = () => {
+        setPlayer1Pos(0); setPlayer2Pos(0); setCurrentPlayer(1);
+        setWinner(null); setFeedback(null); setSpecialEvent(null);
+        setGameState('question');
+        setIsQuestionMinimized(false);
+        setIsPaused(false);
+        pickRandomQuestion();
+      };
+
+      const pickRandomQuestion = () => {
+        setCurrentQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
+        setTimeLeft(20);
+      };
+
+      // Timer de 20 segundos para responder
+      useEffect(() => {
+        if (gameState !== 'question' || feedback || isPaused) return;
+        if (timeLeft <= 0) {
+          // Tempo esgotado!
+          reactionRef.current = { player: currentPlayer, type: 'fail', time: Date.now() };
+          setFeedback({ isCorrect: false, msg: '⏰ Tempo esgotado! Recua 3 casas.' });
+
+          setTimeout(() => {
+            const currentPos = currentPlayer === 1 ? player1Pos : player2Pos;
+            const penaltyPos = Math.max(currentPos - 3, 0);
+            movePlayerStepByStep(currentPlayer, currentPos, penaltyPos, () => {
+              nextTurn();
+            });
+          }, 2000);
+          return;
+        }
+        const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+        return () => clearTimeout(timerId);
+      }, [gameState, timeLeft, feedback, isPaused]);
+
+      const handleAnswer = (selectedAnswer) => {
+        if (gameState !== 'question' || feedback || isPaused) return;
+        const isCorrect = selectedAnswer === currentQuestion.answer;
+
+        reactionRef.current = { player: currentPlayer, type: isCorrect ? 'success' : 'fail', time: Date.now() };
+
+        if (isCorrect) {
+          setFeedback({ isCorrect: true, msg: "Fantástico! Gira o dado!" });
+          setTimeout(() => { setFeedback(null); setGameState('dice'); }, 1500);
+        } else {
+          setFeedback({ isCorrect: false, msg: `Ops! A resposta era ${formatAnswerName(currentQuestion.answer)}.` });
+          setTimeout(() => nextTurn(), 2500);
+        }
+      };
+
+      const rollDice = () => {
+        if (isRolling || isPaused) return;
+        setIsRolling(true);
+        let rolls = 0;
+        const rollInterval = setInterval(() => {
+          setDiceValue(Math.floor(Math.random() * 6) + 1);
+          rolls++;
+          if (rolls >= 15) {
+            clearInterval(rollInterval);
+            setIsRolling(false);
+            const finalValue = Math.floor(Math.random() * 6) + 1;
+            setDiceValue(finalValue);
+            handleDiceResult(finalValue);
+          }
+        }, 80);
+      };
+
+      const handleDiceResult = (rolledValue) => {
+        setFeedback({ isCorrect: true, msg: `Tiraste ${rolledValue}! A avançar...` });
+        setTimeout(() => {
+          const currentPos = currentPlayer === 1 ? player1Pos : player2Pos;
+          const nextPos = Math.min(currentPos + rolledValue, TRACK_LENGTH);
+
+          movePlayerStepByStep(currentPlayer, currentPos, nextPos, () => {
+            if (nextPos >= TRACK_LENGTH) {
+              setTimeout(() => finishGame(currentPlayer), 1000);
+              return;
+            }
+            if (SPECIAL_TILES[nextPos]) triggerSpecialEvent(nextPos);
+            else nextTurn();
+          });
+        }, 2000);
+      };
+
+      const triggerSpecialEvent = (landedPos) => {
+        const event = SPECIAL_TILES[landedPos];
+        setSpecialEvent(event);
+        setGameState('event');
+        setFeedback(null);
+
+        setTimeout(() => {
+          let finalPos;
+          if (event.type === 'reset') finalPos = 0;
+          else finalPos = Math.min(Math.max(landedPos + event.value, 0), TRACK_LENGTH);
+
+          movePlayerStepByStep(currentPlayer, landedPos, finalPos, () => {
+            if (finalPos >= TRACK_LENGTH) finishGame(currentPlayer);
+            else nextTurn();
+          });
+        }, 2500);
+      };
+
+      const updatePlayerPosition = (player, newPos) => {
+        if (player === 1) setPlayer1Pos(newPos); else setPlayer2Pos(newPos);
+      };
+
+      const movePlayerStepByStep = (player, fromPos, toPos, callback) => {
+        const playerIdx = player - 1;
+        const steps = [];
+        if (toPos > fromPos) {
+          for (let i = fromPos + 1; i <= toPos; i++) steps.push(i);
+        } else {
+          for (let i = fromPos - 1; i >= toPos; i--) steps.push(i);
+        }
+        if (steps.length === 0) { if (callback) callback(); return; }
+
+        isAnimating.current[playerIdx] = true;
+        const STEP_DELAY = 700;
+
+        steps.forEach((step, index) => {
+          setTimeout(() => {
+            targetPositions.current[playerIdx] = step;
+            if (index === steps.length - 1) {
+              isAnimating.current[playerIdx] = false;
+              updatePlayerPosition(player, toPos);
+              if (callback) setTimeout(callback, 600);
+            }
+          }, index * STEP_DELAY);
+        });
+      };
+
+      const nextTurn = () => {
+        setFeedback(null); setSpecialEvent(null);
+        setIsQuestionMinimized(false);
+        setCurrentPlayer(currentPlayer === 1 ? 2 : 1);
+        setGameState('question');
+        pickRandomQuestion();
+      };
+
+      const finishGame = (winningPlayer) => {
+        setWinner(winningPlayer); setGameState('end'); setIsPaused(false);
+      };
+
+      const formatAnswerName = (key) => {
+        const map = { contagem: "Contagem", ordenacao: "Ordenação", medida: "Medida", codigo: "Código" };
+        return map[key] || key;
+      };
+
+      const DadoUI = ({ face, isRolling }) => {
+        const dots = [];
+        for (let i = 0; i < face; i++) dots.push(<div key={i} className="w-3 h-3 bg-white rounded-full m-1 shadow-inner" />);
+        return (
+          <div className={`w-20 h-20 bg-red-600 rounded-2xl flex flex-wrap items-center justify-center p-2 border-b-4 border-r-4 border-red-800 shadow-xl mx-auto my-4 transition-transform ${isRolling ? 'animate-spin' : 'scale-110'}`}>
+            {dots}
+          </div>
+        );
+      };
+
+      if (gameState === 'select_p1' || gameState === 'select_p2') {
+        const isP1 = gameState === 'select_p1';
+        return (
+          <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center p-4 font-sans">
+            <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-4xl w-full text-center border-8 border-green-600 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-32 bg-green-500 opacity-20 transform -skew-y-3 origin-top-left"></div>
+              <h1 className="text-4xl md:text-5xl font-black text-slate-800 mb-2 uppercase relative z-10">Aventura Nárnia 3D</h1>
+              <h2 className={`text-xl md:text-2xl font-bold mb-8 px-8 py-3 inline-block rounded-full shadow-lg text-white transition-colors duration-500 relative z-10 ${isP1 ? 'bg-blue-500' : 'bg-red-500'}`}>
+                Jogador {isP1 ? '1' : '2'}, escolhe o teu Personagem!
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 relative z-10">
+                {Object.values(CHARACTERS).map((char) => {
+                  const isSelected = (!isP1 && p1Char === char.id);
+                  return (
+                    <button key={char.id} disabled={isSelected} onClick={() => selectCharacter(char.id)}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-b-8 transition-all shadow-md ${isSelected ? 'opacity-40 grayscale cursor-not-allowed bg-gray-100 border-gray-300' : 'bg-white border-amber-400 hover:bg-amber-50 hover:-translate-y-2 hover:shadow-xl active:translate-y-0 active:border-b-0'}`}
+                    >
+                      <span className="text-6xl mb-3 filter drop-shadow-md">{char.icon}</span>
+                      <span className="font-extrabold text-slate-700 text-sm md:text-base">{char.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const isPlaying = ['question', 'dice', 'event'].includes(gameState);
+
+      return (
+        <div className="relative w-full h-screen overflow-hidden font-sans bg-slate-900 select-none">
+          <div ref={mountRef} className="absolute inset-0 z-0 pointer-events-auto" />
+          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col">
+
+            {isPaused && (
+              <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
+                <div className="bg-white p-10 rounded-3xl shadow-2xl text-center border-8 border-amber-500 max-w-sm w-full animate-in zoom-in">
+                  <h2 className="text-4xl font-black text-slate-800 mb-6 uppercase">Jogo Pausado</h2>
+                  <button onClick={() => setIsPaused(false)} className="bg-amber-500 hover:bg-amber-400 text-white px-8 py-4 rounded-full font-black text-xl flex items-center justify-center gap-3 w-full border-b-8 border-amber-700 active:border-b-0 active:translate-y-2 transition-all">
+                    <Play fill="currentColor" size={24} /> RETOMAR
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {gameState !== 'end' && (
+              <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 flex gap-2 md:gap-4 pointer-events-auto bg-white/90 backdrop-blur-md px-4 md:px-6 py-3 rounded-full shadow-2xl border-2 border-slate-200">
+                {gameState === 'start' ? (
+                  <button onClick={startGame} className="flex items-center gap-2 text-green-700 hover:text-green-500 font-bold transition-colors px-2">
+                    <Play size={20} fill="currentColor" /> <span className="hidden md:inline">Iniciar</span>
+                  </button>
+                ) : (
+                  <button onClick={() => setIsPaused(!isPaused)} className="flex items-center gap-2 text-amber-700 hover:text-amber-500 font-bold transition-colors px-2">
+                    {isPaused ? <><Play size={20} fill="currentColor" /> <span className="hidden md:inline">Retomar</span></> : <><Pause size={20} fill="currentColor" /> <span className="hidden md:inline">Pausar</span></>}
+                  </button>
+                )}
+                <div className="w-px bg-slate-300 mx-1"></div>
+                <button onClick={() => { startGame(); }} className="flex items-center gap-2 text-blue-700 hover:text-blue-500 font-bold transition-colors px-2">
+                  <RotateCcw size={20} /> <span className="hidden md:inline">Reiniciar</span>
+                </button>
+                <div className="w-px bg-slate-300 mx-1"></div>
+                <button onClick={() => { setGameState('select_p1'); setIsPaused(false); }} className="flex items-center gap-2 text-red-700 hover:text-red-500 font-bold transition-colors px-2">
+                  <Square size={20} fill="currentColor" /> <span className="hidden md:inline">Terminar</span>
+                </button>
+              </div>
+            )}
+
+            {isPlaying && (
+              <>
+                <div className="absolute top-4 left-4 z-20 flex flex-col gap-2 pointer-events-auto">
+                  <button onClick={() => setCameraView('free')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'free' ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
+                    <MousePointer2 size={16} /> Câmara Livre
+                  </button>
+                  <button onClick={() => setCameraView('thirdPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'thirdPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
+                    <User size={16} /> 3ª Pessoa (Atrás)
+                  </button>
+                  <button onClick={() => setCameraView('firstPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'firstPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
+                    <Eye size={16} /> 1ª Pessoa
+                  </button>
+                  <button onClick={() => setCameraView('secondPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'secondPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
+                    <Camera size={16} /> 2ª Pessoa (Frente)
+                  </button>
+                  <button onClick={() => setCameraView('topDown')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'topDown' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
+                    <MapIcon size={16} /> Visão Aérea
+                  </button>
+                </div>
+
+                <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-3 pointer-events-auto">
+                  <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border-2 border-white/50 text-right">
+                    <div className="flex flex-col gap-2 text-sm font-bold">
+                      <span className={`px-3 py-1 rounded-md transition-colors ${currentPlayer === 1 ? 'bg-blue-500 text-white shadow-md scale-105' : 'text-slate-500 bg-slate-100'}`}>
+                        {CHARACTERS[p1Char].icon} P1: Casa {player1Pos}
+                      </span>
+                      <span className={`px-3 py-1 rounded-md transition-colors ${currentPlayer === 2 ? 'bg-red-500 text-white shadow-md scale-105' : 'text-slate-500 bg-slate-100'}`}>
+                        {CHARACTERS[p2Char].icon} P2: Casa {player2Pos}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`px-6 py-2 rounded-full shadow-lg border-2 transition-colors duration-300 ${currentPlayer === 1 ? 'bg-blue-600 border-blue-400 text-white' : 'bg-red-600 border-red-400 text-white'}`}>
+                    <span className="font-black uppercase tracking-widest text-xs md:text-sm">Vez do Jogador {currentPlayer}</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {gameState === 'question' && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-80 md:w-96 flex flex-col items-end pointer-events-auto z-30">
+                {!isQuestionMinimized ? (
+                  <div className="w-full bg-amber-100/95 backdrop-blur-md p-6 rounded-3xl shadow-2xl border-4 border-amber-600 animate-in slide-in-from-right relative">
+                    <button onClick={() => setIsQuestionMinimized(true)} className="absolute top-4 right-4 bg-amber-200 hover:bg-amber-300 p-2 rounded-full text-amber-800 transition-colors">
+                      <EyeOff size={20} />
+                    </button>
+
+                    {/* Timer circular */}
+                    <div className="flex justify-center mb-4">
+                      <div className="relative w-16 h-16">
+                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                          <circle cx="32" cy="32" r="28" fill="none" stroke="#e5e7eb" strokeWidth="5" />
+                          <circle cx="32" cy="32" r="28" fill="none"
+                            stroke={timeLeft <= 5 ? '#ef4444' : '#f59e0b'}
+                            strokeWidth="5" strokeLinecap="round"
+                            strokeDasharray={`${(timeLeft / 20) * 175.93} 175.93`}
+                            style={{ transition: 'stroke-dasharray 1s linear, stroke 0.3s' }}
+                          />
+                        </svg>
+                        <span className={`absolute inset-0 flex items-center justify-center font-black text-lg ${timeLeft <= 5 ? 'text-red-600 animate-pulse' : 'text-amber-800'}`}>
+                          {timeLeft}
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3 className="text-amber-900 font-bold text-center mb-4 uppercase tracking-widest text-xs opacity-80 border-b-2 border-amber-200 pb-2">
+                      Classifica o número:
+                    </h3>
+                    <p className="text-xl md:text-2xl font-black text-slate-800 text-center mb-6 bg-white p-4 rounded-2xl shadow-inner">
+                      "{currentQuestion?.text}"
+                    </p>
+                    {!feedback ? (
+                      <div className="flex flex-col gap-3">
+                        {['contagem', 'ordenacao', 'medida', 'codigo'].map((opcao) => (
+                          <button key={opcao} onClick={() => handleAnswer(opcao)} className="bg-white border-b-4 border-amber-300 hover:border-amber-400 text-amber-900 font-black py-3 rounded-xl shadow-md active:translate-y-1 transition-all text-sm uppercase">
+                            {formatAnswerName(opcao)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`p-4 rounded-2xl border-4 text-center ${feedback.isCorrect ? 'bg-green-100 border-green-500 text-green-800' : 'bg-red-100 border-red-500 text-red-800'}`}>
+                        {feedback.isCorrect ? <CheckCircle size={32} className="mx-auto mb-2 text-green-600" /> : <XCircle size={32} className="mx-auto mb-2 text-red-600" />}
+                        <p className="text-lg font-black">{feedback.msg}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button onClick={() => setIsQuestionMinimized(false)} className="bg-amber-500 hover:bg-amber-400 text-white p-4 rounded-2xl shadow-2xl border-b-4 border-amber-700 font-black flex flex-col items-center gap-2 animate-bounce">
+                    <Eye size={28} /> VER PERGUNTA
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex-grow flex items-center justify-center p-4">
+              {gameState === 'start' && (
+                <div className="bg-white/95 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl border-4 border-green-500 max-w-xl text-center pointer-events-auto">
+                  <div className="flex justify-center items-center gap-6 text-6xl mb-6 font-black">
+                    <span className="filter drop-shadow-md">{CHARACTERS[p1Char].icon}</span>
+                    <span className="text-3xl text-slate-400">VS</span>
+                    <span className="filter drop-shadow-md">{CHARACTERS[p2Char].icon}</span>
+                  </div>
+                  <h2 className="text-3xl font-black text-slate-800 mb-4 uppercase">
+                    {CHARACTERS[p1Char].name} <br />vs<br /> {CHARACTERS[p2Char].name}
+                  </h2>
+                  <p className="text-slate-600 text-lg font-medium mb-8 bg-slate-100 p-4 rounded-xl shadow-inner">
+                    🖱️ <b>Dica:</b> Clica e arrasta no cenário para rodar a câmara. Usa a roda do rato para dar Zoom! A pergunta ficará na lateral.
+                  </p>
+                  <button onClick={startGame} className="bg-green-500 border-b-8 border-green-700 hover:-translate-y-1 active:border-b-0 active:translate-y-2 text-white font-black text-2xl py-4 px-12 rounded-full shadow-xl flex items-center gap-3 mx-auto transition-all">
+                    <Play fill="currentColor" size={28} /> COMEÇAR
+                  </button>
+                </div>
+              )}
+
+              {gameState === 'dice' && (
+                <div className="bg-slate-800/95 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl border-4 border-slate-600 max-w-sm w-full text-center pointer-events-auto">
+                  <h3 className="text-white text-2xl font-black uppercase mb-6 drop-shadow-md">Lança o Dado!</h3>
+                  <DadoUI face={diceValue} isRolling={isRolling} />
+                  <div className="h-16 mt-6 flex items-center justify-center">
+                    {!isRolling && !feedback ? (
+                      <button onClick={rollDice} className="bg-red-500 border-b-8 border-red-700 hover:bg-red-400 text-white font-black text-xl py-3 px-8 rounded-full w-full active:border-b-0 active:translate-y-2 transition-all">ROLAR DADO</button>
+                    ) : (
+                      <p className="text-green-400 text-2xl font-black animate-pulse">{feedback?.msg || "A rodar..."}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {gameState === 'event' && specialEvent && (
+                <div className="bg-yellow-300/95 backdrop-blur-md p-8 rounded-[2rem] shadow-2xl border-8 border-yellow-500 max-w-lg text-center pointer-events-auto animate-[bounce_1s_ease-in-out_infinite]">
+                  <AlertTriangle size={80} className={`mx-auto mb-4 ${specialEvent.type === 'reset' ? 'text-red-600' : 'text-orange-600'}`} />
+                  <h2 className="text-4xl font-black text-slate-800 uppercase mb-4">CASA ESPECIAL!</h2>
+                  <p className="text-2xl font-bold bg-white p-4 rounded-xl shadow-inner">{specialEvent.text}</p>
+                </div>
+              )}
+
+              {gameState === 'end' && (
+                <div className="bg-yellow-400/95 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl border-8 border-yellow-600 max-w-xl text-center pointer-events-auto z-50 animate-in zoom-in">
+                  <div className="text-8xl mb-6 drop-shadow-lg text-white">🏆</div>
+                  <h2 className="text-5xl font-black text-yellow-900 uppercase mb-4">Vitória!</h2>
+                  <p className={`text-3xl font-black mb-10 px-6 py-4 rounded-2xl bg-white shadow-inner ${winner === 1 ? 'text-blue-600' : 'text-red-600'}`}>
+                    O {winner === 1 ? CHARACTERS[p1Char].name.toUpperCase() : CHARACTERS[p2Char].name.toUpperCase()} VENCEU!
+                  </p>
+                  <button onClick={() => setGameState('select_p1')} className="bg-slate-800 hover:bg-slate-700 border-b-8 border-slate-900 text-white font-black text-2xl py-4 px-10 rounded-full w-full flex justify-center gap-3 transition-transform hover:-translate-y-1 active:translate-y-2 active:border-b-0">
+                    <RefreshCw size={28} /> NOVO JOGO
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
+</body>
+
+</html>

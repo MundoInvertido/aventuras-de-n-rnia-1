@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - narnia_games
   workflow_dispatch:
 
 jobs:

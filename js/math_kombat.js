@@ -32,10 +32,10 @@ const GAME_SETTINGS = {
     answerTime: 60
 };
 const MAX_HP = 100;
-const DMG = { normal: 10, special: 20, super: 40 };
+const DMG = { normal: 5, special: 10, super: 15, ultra: 20 };
 let game = {
-    p1: { charIdx: -1, hp: MAX_HP, streak: 0 },
-    p2: { charIdx: -1, hp: MAX_HP, streak: 0 },
+    p1: { charIdx: -1, hp: MAX_HP, streak: 0, giantMode: false, giantTimer: 0 },
+    p2: { charIdx: -1, hp: MAX_HP, streak: 0, giantMode: false, giantTimer: 0 },
     selectPhase: 'p1', // p1 or p2
     turn: null,
     currentAnswer: null,
@@ -63,16 +63,18 @@ function createFighter(charData, side) {
     return {
         char: charData,
         side: side,
-        x: baseX, y: 0.85, // normalized coords
+        x: baseX, y: 0.85,
         baseX: baseX,
         targetX: baseX,
-        state: 'idle', // idle, punch, kick, special, hit, win, drink, victory, defeat
+        state: 'idle',
         frame: 0,
         stateTimer: 0,
         idleBob: 0,
         flash: 0,
         afterimageTimer: 0,
-        dustTimer: 0
+        dustTimer: 0,
+        giantMode: false,
+        giantTimer: 0
     };
 }
 
@@ -677,7 +679,7 @@ function drawArena(ts) {
             ctx.beginPath();
             ctx.moveTo(radCx + Math.cos(ang) * 45, radCy + Math.sin(ang) * 45);
             ctx.lineTo(radCx + Math.cos(ang) * Math.max(W, H) * 1.3,
-                       radCy + Math.sin(ang) * Math.max(W, H) * 1.3);
+                radCy + Math.sin(ang) * Math.max(W, H) * 1.3);
             ctx.stroke();
         }
         ctx.restore();
@@ -987,6 +989,108 @@ function updateAndDrawGroundCracks(W, floorY) {
     }
 }
 
+// --- SKELETAL ANIMATION ENGINE (STICKMAN GO STYLE) ---
+const ANIM_STATES = {
+    idle: { t: 5, lArm: { s: 155, e: -30 }, rArm: { s: 120, e: 60 }, lLeg: { h: 190, k: 25 }, rLeg: { h: 165, k: -15 } },
+    punch: { t: 35, lArm: { s: 140, e: 80 }, rArm: { s: 75, e: 10 }, lLeg: { h: 210, k: 30 }, rLeg: { h: 140, k: -5 } },
+    kick: { t: -15, lArm: { s: 170, e: 0 }, rArm: { s: 95, e: -40 }, lLeg: { h: 180, k: 15 }, rLeg: { h: 70, k: 0 } },
+    special: { t: -25, lArm: { s: 20, e: 35 }, rArm: { s: -20, e: -35 }, lLeg: { h: 210, k: 25 }, rLeg: { h: 150, k: -25 } },
+    hit: { t: -45, lArm: { s: 140, e: -60 }, rArm: { s: 160, e: -60 }, lLeg: { h: 195, k: 45 }, rLeg: { h: 125, k: -50 } },
+    dash: { t: 50, lArm: { s: 240, e: 10 }, rArm: { s: 220, e: 10 }, lLeg: { h: 220, k: 40 }, rLeg: { h: 120, k: -50 } }
+};
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function drawOutlinedBone(ctx, x, y, deg, len, thick, color) {
+    const rad = deg * Math.PI / 180;
+    const ex = x + Math.sin(rad) * len;
+    const ey = y - Math.cos(rad) * len;
+    
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = thick + 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = thick;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+    
+    return { x: ex, y: ey };
+}
+
+function drawStickmanSkeletal(ctx, f, ch, ts) {
+    const sColor = ch.skinColor || ch.bodyColor || '#e62429'; 
+    
+    const velX = Math.abs(f.targetX - f.x);
+    let stParams = ANIM_STATES[f.state] || ANIM_STATES.idle;
+    if (f.state === 'idle' && velX > 0.005) stParams = ANIM_STATES.dash;
+    
+    let t = 1;
+    if (f.state !== 'idle' && f.state !== 'dash') {
+        const p = Math.max(0, Math.min(1, f.stateTimer / 25));
+        t = Math.sin(p * Math.PI);
+    }
+    
+    const id = ANIM_STATES.idle;
+    const pTorso = lerp(id.t, stParams.t, t);
+    const pLArmS = lerp(id.lArm.s, stParams.lArm.s, t), pLArmE = lerp(id.lArm.e, stParams.lArm.e, t);
+    const pRArmS = lerp(id.rArm.s, stParams.rArm.s, t), pRArmE = lerp(id.rArm.e, stParams.rArm.e, t);
+    const pLLegH = lerp(id.lLeg.h, stParams.lLeg.h, t), pLLegK = lerp(id.lLeg.k, stParams.lLeg.k, t);
+    const pRLegH = lerp(id.rLeg.h, stParams.rLeg.h, t), pRLegK = lerp(id.rLeg.k, stParams.rLeg.k, t);
+
+    const bob = Math.sin(ts * 0.005) * 6;
+    const breath = f.state === 'idle' ? bob : 0;
+    
+    const hipX = 0, hipY = -38 + Math.sin(ts * 0.01) * 2;
+    const spineLen = 32;
+
+    const outLA = pLLegH, outKA = outLA + pLLegK;
+    let kE = drawOutlinedBone(ctx, hipX, hipY, outLA, 24, 7, sColor);
+    drawOutlinedBone(ctx, kE.x, kE.y, outKA, 28, 6, sColor);
+    
+    const outSA = pLArmS + breath, outEA = outSA + pLArmE;
+    let bE = drawOutlinedBone(ctx, hipX + Math.sin(pTorso * Math.PI/180)*spineLen, hipY - Math.cos(pTorso * Math.PI/180)*spineLen, outSA, 24, 6, sColor);
+    drawOutlinedBone(ctx, bE.x, bE.y, outEA, 20, 5, sColor);
+    
+    const spine = drawOutlinedBone(ctx, hipX, hipY, pTorso, spineLen, 8, sColor);
+    
+    const fLA = pRLegH, fKA = fLA + pRLegK;
+    let fkE = drawOutlinedBone(ctx, hipX, hipY, fLA, 24, 7, sColor);
+    drawOutlinedBone(ctx, fkE.x, fkE.y, fKA, 28, 6, sColor);
+
+    const fSA = pRArmS - breath, fEA = fSA + pRArmE;
+    let feE = drawOutlinedBone(ctx, spine.x, spine.y, fSA, 24, 6, sColor);
+    drawOutlinedBone(ctx, feE.x, feE.y, fEA, 20, 5, sColor);
+
+    const headX = spine.x + Math.sin(pTorso * Math.PI/180)*16;
+    const headY = spine.y - Math.cos(pTorso * Math.PI/180)*16;
+    
+    ctx.fillStyle = sColor;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(headX, headY, 15, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = f.state === 'hit' ? '#fff' : '#000';
+    ctx.beginPath(); ctx.arc(headX + 5, headY - 3, 2.5, 0, Math.PI*2); ctx.fill();
+    
+    ctx.save();
+    ctx.translate(hipX, hipY);
+    ctx.scale(0.8, 0.8);
+    const drawer = CHAR_DRAWERS[ch.id] || (() => {});
+    const oldDrawLegs = _drawLegs;
+    const oldDrawArms = _drawArms;
+    _drawLegs = () => {}; 
+    _drawArms = () => {};
+    drawer(ctx, f, ch, ts);
+    _drawLegs = oldDrawLegs;
+    _drawArms = oldDrawArms;
+    ctx.restore();
+}
+
 function drawFighter(f, ts, W, H, floorY) {
     const ch = f.char;
     // Smooth movement (lerp towards targetX)
@@ -996,7 +1100,8 @@ function drawFighter(f, ts, W, H, floorY) {
 
     const cx = f.x * W;
     const baseScale = Math.min(W, H) * 0.003;
-    const scale = Math.max(baseScale, 0.9);
+    const giantScale = f.giantMode ? 1.5 : 1;
+    const scale = Math.max(baseScale, 0.9) * giantScale;
     const dir = f.side === 'left' ? 1 : -1;
 
     // Mortal Kombat style rhythmic breathing & bouncing
@@ -1057,7 +1162,26 @@ function drawFighter(f, ts, W, H, floorY) {
 
     // Aura dourada quando super está desbloqueado (streak >= 5)
     const pid = f.side === 'left' ? 'p1' : 'p2';
-    if (game[pid] && game[pid].streak >= 5 && f.state === 'idle') {
+    const isGiant = f.giantMode || (game[pid] && game[pid].giantMode);
+    if (isGiant) {
+        const auraAlpha = 0.25 + Math.sin(ts * 0.01) * 0.15;
+        const auraGrd = ctx.createRadialGradient(0, -55, 10, 0, -55, 65);
+        auraGrd.addColorStop(0, 'rgba(255,50,50,0.8)');
+        auraGrd.addColorStop(0.4, 'rgba(255,140,0,0.6)');
+        auraGrd.addColorStop(0.7, 'rgba(255,215,0,0.3)');
+        auraGrd.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = auraGrd;
+        ctx.beginPath(); ctx.arc(0, -55, 65, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.7 + Math.sin(ts * 0.012) * 0.3;
+        for (let i = 0; i < 6; i++) {
+            const ang = (ts * 0.008) + (i / 6) * Math.PI * 2;
+            const pr = 45 + Math.sin(ts * 0.01 + i) * 8;
+            ctx.fillStyle = i % 2 === 0 ? '#ff4444' : '#ffaa00';
+            ctx.beginPath(); ctx.arc(Math.cos(ang) * pr, -55 + Math.sin(ang) * 8, 4 + (isGiant ? 2 : 0), 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    } else if (game[pid] && game[pid].streak >= 5 && f.state === 'idle') {
         const auraAlpha = 0.18 + Math.sin(ts * 0.008) * 0.1;
         const auraGrd = ctx.createRadialGradient(0, -55, 5, 0, -55, 52);
         auraGrd.addColorStop(0, 'rgba(255,215,0,0.6)');
@@ -1083,9 +1207,9 @@ function drawFighter(f, ts, W, H, floorY) {
     ctx.save();
     ctx.globalAlpha = 0.38;
     const shadowGrd = ctx.createRadialGradient(0, 33, 0, 0, 33, 36);
-    shadowGrd.addColorStop(0,   'rgba(0,0,0,0.85)');
+    shadowGrd.addColorStop(0, 'rgba(0,0,0,0.85)');
     shadowGrd.addColorStop(0.5, 'rgba(0,0,0,0.4)');
-    shadowGrd.addColorStop(1,   'rgba(0,0,0,0)');
+    shadowGrd.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = shadowGrd;
     ctx.beginPath(); ctx.ellipse(0, 33, 36, 7, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
@@ -1417,31 +1541,31 @@ function _drawHighlight(ctx, x, y, w, h) {
 // expression: 'idle' | 'punch' | 'hit' | 'victory' | 'defeat' | 'drink'
 function _drawFace(ctx, skinC, expression, ts) {
     const eyeY = -93;
-    const isHit  = expression === 'hit';
-    const isDef  = expression === 'defeat';
-    const isVic  = expression === 'victory';
-    const isAng  = expression === 'punch' || isHit;
+    const isHit = expression === 'hit';
+    const isDef = expression === 'defeat';
+    const isVic = expression === 'victory';
+    const isAng = expression === 'punch' || isHit;
 
     // --- Eye whites (oval) ---
     ctx.fillStyle = '#fff';
     const eRX = isDef ? 4 : 6, eRY = isDef ? 2.5 : isHit ? 5.5 : 4.5;
     ctx.beginPath(); ctx.ellipse(-7, eyeY, eRX, eRY, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse( 7, eyeY, eRX, eRY, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, eyeY, eRX, eRY, 0, 0, Math.PI * 2); ctx.fill();
 
     // --- Iris ---
     const irisColor = isDef ? '#4b5563' : isVic ? '#f59e0b' : '#1d4ed8';
     ctx.fillStyle = irisColor;
     if (!isDef) {
         ctx.beginPath(); ctx.ellipse(-7, eyeY + 0.5, 3.5, 3.8, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse( 7, eyeY + 0.5, 3.5, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(7, eyeY + 0.5, 3.5, 3.8, 0, 0, Math.PI * 2); ctx.fill();
         // Pupils
         ctx.fillStyle = '#111';
         ctx.beginPath(); ctx.ellipse(-7, eyeY + 0.5, 2, 2.8, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse( 7, eyeY + 0.5, 2, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(7, eyeY + 0.5, 2, 2.8, 0, 0, Math.PI * 2); ctx.fill();
         // Highlight sparkle
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         _circle(ctx, -5.5, eyeY - 1.5, 1.4);
-        _circle(ctx,  8.5, eyeY - 1.5, 1.4);
+        _circle(ctx, 8.5, eyeY - 1.5, 1.4);
     } else {
         // Defeat: dull lines
         ctx.fillStyle = '#6b7280';
@@ -1452,16 +1576,16 @@ function _drawFace(ctx, skinC, expression, ts) {
     ctx.fillStyle = '#1a0f00';
     if (isVic) {
         ctx.save(); ctx.translate(-7, eyeY - 7); ctx.rotate(-0.22); ctx.fillRect(-5, 0, 11, 2.5); ctx.restore();
-        ctx.save(); ctx.translate( 7, eyeY - 7); ctx.rotate( 0.22); ctx.fillRect(-6, 0, 11, 2.5); ctx.restore();
+        ctx.save(); ctx.translate(7, eyeY - 7); ctx.rotate(0.22); ctx.fillRect(-6, 0, 11, 2.5); ctx.restore();
     } else if (isAng) {
         ctx.save(); ctx.translate(-7, eyeY - 7); ctx.rotate(-0.42); ctx.fillRect(-5, 0, 11, 3); ctx.restore();
-        ctx.save(); ctx.translate( 7, eyeY - 7); ctx.rotate( 0.42); ctx.fillRect(-6, 0, 11, 3); ctx.restore();
+        ctx.save(); ctx.translate(7, eyeY - 7); ctx.rotate(0.42); ctx.fillRect(-6, 0, 11, 3); ctx.restore();
     } else if (isDef) {
-        ctx.save(); ctx.translate(-7, eyeY - 5); ctx.rotate( 0.25); ctx.fillRect(-4, 0, 9, 2.5); ctx.restore();
-        ctx.save(); ctx.translate( 7, eyeY - 5); ctx.rotate(-0.25); ctx.fillRect(-5, 0, 9, 2.5); ctx.restore();
+        ctx.save(); ctx.translate(-7, eyeY - 5); ctx.rotate(0.25); ctx.fillRect(-4, 0, 9, 2.5); ctx.restore();
+        ctx.save(); ctx.translate(7, eyeY - 5); ctx.rotate(-0.25); ctx.fillRect(-5, 0, 9, 2.5); ctx.restore();
     } else {
         ctx.save(); ctx.translate(-7, eyeY - 7); ctx.rotate(-0.12); ctx.fillRect(-5, 0, 11, 2.5); ctx.restore();
-        ctx.save(); ctx.translate( 7, eyeY - 7); ctx.rotate( 0.12); ctx.fillRect(-6, 0, 11, 2.5); ctx.restore();
+        ctx.save(); ctx.translate(7, eyeY - 7); ctx.rotate(0.12); ctx.fillRect(-6, 0, 11, 2.5); ctx.restore();
     }
 
     // --- Mouth (only shown when not masked — characters can draw their own mask over it) ---
@@ -1499,7 +1623,7 @@ function _drawLegs(ctx, f, pantsC, shoeC, spread, shoeW) {
     // Thigh: wide trapezoid hip→knee
     function _thigh(x) {
         ctx.beginPath();
-        ctx.moveTo(x - 8, -5);   ctx.lineTo(x + 8, -5);
+        ctx.moveTo(x - 8, -5); ctx.lineTo(x + 8, -5);
         ctx.lineTo(x + 5.5, KY); ctx.lineTo(x - 5.5, KY);
         ctx.closePath(); ctx.fill();
     }
@@ -1507,7 +1631,7 @@ function _drawLegs(ctx, f, pantsC, shoeC, spread, shoeW) {
     function _shin(x) {
         ctx.beginPath();
         ctx.moveTo(x - 5.5, KY + 1); ctx.lineTo(x + 5.5, KY + 1);
-        ctx.lineTo(x + 3.5, 28);     ctx.lineTo(x - 3.5, 28);
+        ctx.lineTo(x + 3.5, 28); ctx.lineTo(x - 3.5, 28);
         ctx.closePath(); ctx.fill();
     }
     // Boot: flat, wide, rounded
@@ -1534,7 +1658,7 @@ function _drawLegs(ctx, f, pantsC, shoeC, spread, shoeW) {
     } else {
         // Wide MK fighting stance
         const bx = -sp - 3; // back leg x
-        const fx =  sp + 4; // front leg x
+        const fx = sp + 4; // front leg x
         ctx.fillStyle = pantsC;
         _hip(bx); _thigh(bx); _circle(ctx, bx, KY, 7); _shin(bx);
         _hip(fx); _thigh(fx); _circle(ctx, fx, KY, 7); _shin(fx);
@@ -1544,7 +1668,7 @@ function _drawLegs(ctx, f, pantsC, shoeC, spread, shoeW) {
 }
 
 function _drawArms(ctx, f, armColor, fistColor, torsoTop) {
-    const ty  = torsoTop || -70;
+    const ty = torsoTop || -70;
     const lElbY = ty + 14; // left elbow y
     const rElbY = ty + 12; // right elbow y
 
@@ -1557,8 +1681,8 @@ function _drawArms(ctx, f, armColor, fistColor, torsoTop) {
     function _upperArm(side) {
         const ey = side === -1 ? lElbY : rElbY;
         ctx.beginPath();
-        ctx.moveTo(side * 12, ty);  ctx.lineTo(side * 26, ty);
-        ctx.lineTo(side * 30, ey);  ctx.lineTo(side * 16, ey);
+        ctx.moveTo(side * 12, ty); ctx.lineTo(side * 26, ty);
+        ctx.lineTo(side * 30, ey); ctx.lineTo(side * 16, ey);
         ctx.closePath(); ctx.fill();
         _circle(ctx, side * 24, ey, 6.5);
     }
@@ -1585,7 +1709,7 @@ function _drawArms(ctx, f, armColor, fistColor, torsoTop) {
         ctx.fillStyle = armColor;
         ctx.save(); ctx.translate(10, ty + 12);
         ctx.fillRect(0, -6, 46, 11);
-        ctx.fillRect(0,  5, 46, 11);
+        ctx.fillRect(0, 5, 46, 11);
         ctx.restore();
 
     } else if (f.state === 'drink') {
@@ -1614,7 +1738,7 @@ function _drawArms(ctx, f, armColor, fistColor, torsoTop) {
         ctx.fillStyle = '#4ade80'; ctx.font = 'bold 14px sans-serif';
         const riseT = Date.now() * 0.003;
         ctx.globalAlpha = 0.7;
-        ctx.fillText('+', 6 + Math.sin(riseT) * 8,  -100 - (riseT % 30) * 2);
+        ctx.fillText('+', 6 + Math.sin(riseT) * 8, -100 - (riseT % 30) * 2);
         ctx.fillText('+', -8 + Math.cos(riseT * 1.2) * 6, -110 - (riseT % 25) * 2);
         ctx.globalAlpha = 1;
 
@@ -2976,8 +3100,8 @@ CHAR_DRAWERS['blankao'] = (ctx, f, ch, ts) => {
     ctx.fillStyle = '#16a34a'; _circle(ctx, 0, -91, 20);
     // Wild orange dreadlocks — up and back
     ctx.fillStyle = '#ea580c';
-    const dreads = [[-18,-101,6,30],[-12,-104,5,28],[-5,-106,5,28],[2,-106,5,28],[9,-104,5,28],[15,-101,6,26]];
-    dreads.forEach(([x,y,w,h]) => { ctx.save(); ctx.translate(x,y); ctx.rotate(-0.3 + x*0.02); ctx.fillRect(-w/2,0,w,-h); ctx.restore(); });
+    const dreads = [[-18, -101, 6, 30], [-12, -104, 5, 28], [-5, -106, 5, 28], [2, -106, 5, 28], [9, -104, 5, 28], [15, -101, 6, 26]];
+    dreads.forEach(([x, y, w, h]) => { ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3 + x * 0.02); ctx.fillRect(-w / 2, 0, w, -h); ctx.restore(); });
     // Wide flat nose
     ctx.fillStyle = '#15803d';
     ctx.beginPath(); ctx.ellipse(0, -88, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
@@ -3090,7 +3214,7 @@ CHAR_DRAWERS['dhalsimba'] = (ctx, f, ch, ts) => {
     _drawArms(ctx, f, '#a05828', '#a05828', -76);
     // Floating effect in idle (subtle bob already from idleBob, add glow)
     if (f.state === 'idle') {
-        ctx.fillStyle = `rgba(251,191,36,${0.08 + Math.sin(t*0.005)*0.06})`;
+        ctx.fillStyle = `rgba(251,191,36,${0.08 + Math.sin(t * 0.005) * 0.06})`;
         ctx.beginPath(); ctx.ellipse(0, 28, 20, 8, 0, 0, Math.PI * 2); ctx.fill();
     }
     // Bald head with markings
@@ -3275,16 +3399,16 @@ function roundRect(ctx, x, y, w, h, r) { _roundRect(ctx, x, y, w, h, r); }
 
         // --- Background: dark stone gradient ---
         const bg = cx.createLinearGradient(0, 0, 0, SZ);
-        bg.addColorStop(0,   '#08080f');
+        bg.addColorStop(0, '#08080f');
         bg.addColorStop(0.4, '#131320');
-        bg.addColorStop(1,   '#04040a');
+        bg.addColorStop(1, '#04040a');
         cx.fillStyle = bg; cx.fillRect(0, 0, SZ, SZ);
 
         // Radial glow in character's body color
         const glow = cx.createRadialGradient(SZ / 2, SZ * 0.6, 5, SZ / 2, SZ * 0.6, SZ * 0.65);
-        glow.addColorStop(0,   `rgba(${r},${g},${b},0.28)`);
+        glow.addColorStop(0, `rgba(${r},${g},${b},0.28)`);
         glow.addColorStop(0.6, `rgba(${r},${g},${b},0.08)`);
-        glow.addColorStop(1,   'rgba(0,0,0,0)');
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
         cx.fillStyle = glow; cx.fillRect(0, 0, SZ, SZ);
 
         // Scanlines (subtle)
@@ -3294,9 +3418,9 @@ function roundRect(ctx, x, y, w, h, r) { _roundRect(ctx, x, y, w, h, r); }
 
         // --- Floor glow under feet ---
         const floor = cx.createRadialGradient(SZ / 2, SZ - 8, 0, SZ / 2, SZ - 8, 55);
-        floor.addColorStop(0,   `rgba(${r},${g},${b},0.45)`);
+        floor.addColorStop(0, `rgba(${r},${g},${b},0.45)`);
         floor.addColorStop(0.5, `rgba(${r},${g},${b},0.15)`);
-        floor.addColorStop(1,   'rgba(0,0,0,0)');
+        floor.addColorStop(1, 'rgba(0,0,0,0)');
         cx.fillStyle = floor; cx.fillRect(0, SZ - 30, SZ, 30);
 
         // --- Render character at scale 1.0, centered, feet ~10px above bottom ---
@@ -3310,7 +3434,7 @@ function roundRect(ctx, x, y, w, h, r) { _roundRect(ctx, x, y, w, h, r); }
         cx.restore();
 
         // --- Vignette overlay ---
-        const vign = cx.createRadialGradient(SZ/2, SZ/2, SZ*0.35, SZ/2, SZ/2, SZ*0.8);
+        const vign = cx.createRadialGradient(SZ / 2, SZ / 2, SZ * 0.35, SZ / 2, SZ / 2, SZ * 0.8);
         vign.addColorStop(0, 'rgba(0,0,0,0)');
         vign.addColorStop(1, 'rgba(0,0,0,0.55)');
         cx.fillStyle = vign; cx.fillRect(0, 0, SZ, SZ);
@@ -3344,22 +3468,29 @@ function updateHUD() {
         if (!pipsEl) return;
         const s = game[pid].streak;
         pipsEl.innerHTML = '';
-        // 6 pips: 4 to special, divider, then 2 more to super
-        for (let i = 1; i <= 6; i++) {
-            if (i === 5) {
+        // 10 pips: 4 to special, divider, 3 to super (at 7), divider, 3 to ultra (at 10)
+        for (let i = 1; i <= 10; i++) {
+            if (i === 5 || i === 8) {
                 const div = document.createElement('div');
                 div.className = 'streak-pip divider';
                 pipsEl.appendChild(div);
+                continue;
             }
             const pip = document.createElement('div');
             let cls = 'streak-pip';
-            if (s >= 6 && i <= 6) cls += ' super';
-            else if (s >= 4 && i <= 4) cls += ' special';
+            if (s >= 10) cls += ' ultra';
+            else if (s >= 7) cls += ' super';
+            else if (s >= 4) cls += ' special';
             else if (s >= i) cls += ' filled';
             pip.className = cls;
             pipsEl.appendChild(pip);
         }
-        if (s >= 6) labelEl.textContent = '⬆ SUPER!';
+        if (s >= 10) labelEl.textContent = '💥 ULTRA!';
+        else if (s === 9) labelEl.textContent = '9/10';
+        else if (s === 8) labelEl.textContent = '8/10';
+        else if (s >= 7) labelEl.textContent = '⬆ SUPER!';
+        else if (s === 6) labelEl.textContent = '6/7';
+        else if (s === 5) labelEl.textContent = '5/7';
         else if (s >= 4) labelEl.textContent = '⚡ ESPECIAL!';
         else if (s > 0) labelEl.textContent = `${s}/4`;
         else labelEl.textContent = '';
@@ -3422,44 +3553,44 @@ const QUESTION_DB = {
     ],
     templo: [
         // Tabuada do 1
-        { text: "🔱 Na tabuada mágica: 1 × 7 = ?",         correct: 7 },
-        { text: "🔱 Qual o segredo de 1 × 100?",             correct: 100 },
+        { text: "🔱 Na tabuada mágica: 1 × 7 = ?", correct: 7 },
+        { text: "🔱 Qual o segredo de 1 × 100?", correct: 100 },
         // Tabuada do 2
-        { text: "🔱 O sábio ensina: 2 × 6 = ?",             correct: 12 },
-        { text: "🔱 O templo tem 2 × 9 degraus. Quantos?",   correct: 18 },
-        { text: "🔱 A tabuada do 2: 2 × 5 = ?",             correct: 10 },
+        { text: "🔱 O sábio ensina: 2 × 6 = ?", correct: 12 },
+        { text: "🔱 O templo tem 2 × 9 degraus. Quantos?", correct: 18 },
+        { text: "🔱 A tabuada do 2: 2 × 5 = ?", correct: 10 },
         // Tabuada do 3
         { text: "🔱 Três guerreiros, cada um com 3 escudos: 3 × 3 = ?", correct: 9 },
-        { text: "🔱 O dragão tem 3 × 8 escamas. Quantas?",  correct: 24 },
-        { text: "🔱 Quanto é 3 × 7 no templo?",             correct: 21 },
+        { text: "🔱 O dragão tem 3 × 8 escamas. Quantas?", correct: 24 },
+        { text: "🔱 Quanto é 3 × 7 no templo?", correct: 21 },
         // Tabuada do 4
         { text: "🔱 Quatro altares com 4 tochas cada: 4 × 4 = ?", correct: 16 },
-        { text: "🔱 O sábio conta: 4 × 9 = ?",              correct: 36 },
-        { text: "🔱 Qual o resultado de 4 × 6?",             correct: 24 },
+        { text: "🔱 O sábio conta: 4 × 9 = ?", correct: 36 },
+        { text: "🔱 Qual o resultado de 4 × 6?", correct: 24 },
         // Tabuada do 5
         { text: "🔱 Cinco pergaminhos, 5 selos em cada: 5 × 5 = ?", correct: 25 },
-        { text: "🔱 O oráculo revela: 5 × 8 = ?",           correct: 40 },
-        { text: "🔱 Quanto valem 5 × 7 moedas de ouro?",    correct: 35 },
+        { text: "🔱 O oráculo revela: 5 × 8 = ?", correct: 40 },
+        { text: "🔱 Quanto valem 5 × 7 moedas de ouro?", correct: 35 },
         // Tabuada do 6
         { text: "🔱 Seis pilares, 6 runas em cada: 6 × 6 = ?", correct: 36 },
-        { text: "🔱 O guardião diz: 6 × 7 = ?",             correct: 42 },
-        { text: "🔱 Calcule 6 × 8 nas estrelas:",           correct: 48 },
+        { text: "🔱 O guardião diz: 6 × 7 = ?", correct: 42 },
+        { text: "🔱 Calcule 6 × 8 nas estrelas:", correct: 48 },
         // Tabuada do 7
         { text: "🔱 Sete templos com 7 portas cada: 7 × 7 = ?", correct: 49 },
-        { text: "🔱 O mago pergunta: 7 × 8 = ?",            correct: 56 },
-        { text: "🔱 Quanto é 7 × 9?",                       correct: 63 },
+        { text: "🔱 O mago pergunta: 7 × 8 = ?", correct: 56 },
+        { text: "🔱 Quanto é 7 × 9?", correct: 63 },
         // Tabuada do 8
-        { text: "🔱 Oito cristais com 8 faces: 8 × 8 = ?",  correct: 64 },
+        { text: "🔱 Oito cristais com 8 faces: 8 × 8 = ?", correct: 64 },
         { text: "🔱 O dragão tem 8 garras e 9 escamas por garra: 8 × 9 = ?", correct: 72 },
-        { text: "🔱 Oito feitiços de nível 7: 8 × 7 = ?",   correct: 56 },
+        { text: "🔱 Oito feitiços de nível 7: 8 × 7 = ?", correct: 56 },
         // Tabuada do 9
         { text: "🔱 Nove deuses com 9 poderes cada: 9 × 9 = ?", correct: 81 },
-        { text: "🔱 O sábio supremo revela: 9 × 8 = ?",     correct: 72 },
+        { text: "🔱 O sábio supremo revela: 9 × 8 = ?", correct: 72 },
         { text: "🔱 Nove esferas e 7 fragmentos: 9 × 7 = ?", correct: 63 },
         // Tabuada do 10
         { text: "🔱 Dez cofres com 10 moedas: 10 × 10 = ?", correct: 100 },
-        { text: "🔱 O templo tem 10 × 7 pedras: quantas?",  correct: 70 },
-        { text: "🔱 Qual o segredo de 10 × 9?",             correct: 90 }
+        { text: "🔱 O templo tem 10 × 7 pedras: quantas?", correct: 70 },
+        { text: "🔱 Qual o segredo de 10 × 9?", correct: 90 }
     ]
 };
 
@@ -3665,9 +3796,49 @@ function genTabuada(diff) {
         return makeOptions(item.text, item.correct);
     }
 
-    // Todas as tabuadas devem ser inclusas de 1 a 10
-    const a = Math.floor(Math.random() * 10) + 1;
-    const b = Math.floor(Math.random() * 10) + 1;
+    // Nova lógica de dificuldade baseada na vida do oponente e modo gigante:
+    // - Tabuada 1, 2, 3, 10 até 80% da vida do oponente (>= 80%)
+    // - Tabuada 4, 5, 6 até 60% da vida do oponente (>= 60% e < 80%)
+    // - Tabuada 7, 8, 9 abaixo de 40% da vida do oponente (< 40%)
+    // - Modo gigante: sempre tabuada 7, 8 ou 9 (nunca fácil)
+    // - Considerar comutativas (1x9 e 9x1 são ambas tabuada do 1)
+    const attacker = game.turn;
+    const defender = attacker === 'p1' ? 'p2' : 'p1';
+    const defenderHpPercent = (game[defender].hp / MAX_HP) * 100;
+    const isGiant = game[attacker] && game[attacker].giantMode;
+
+    // Determinar tabuada baseada na vida do oponente ou modo gigante
+    let validTables = [];
+    if (isGiant) {
+        // Modo gigante: sempre tabuada 7, 8 ou 9
+        validTables = [7, 8, 9];
+    } else if (defenderHpPercent >= 80) {
+        // Oponente com 80%+ HP: tabuada 1, 2, 3, 10
+        validTables = [1, 2, 3, 10];
+    } else if (defenderHpPercent >= 60) {
+        // Oponente com 60-80% HP: tabuada 1, 2, 3, 4, 5, 6, 10
+        validTables = [1, 2, 3, 4, 5, 6, 10];
+    } else if (defenderHpPercent >= 40) {
+        // Oponente com 40-60% HP: todas as tabuadas
+        validTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    } else {
+        // Oponente com menos de 40% HP: todas as tabuadas
+        validTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    }
+
+    // Escolher tabuada e fator
+    const chosenTable = validTables[Math.floor(Math.random() * validTables.length)];
+    const multiplier = Math.floor(Math.random() * 10) + 1;
+
+    // Para propriedade comutativa, apresentar em ordem aleatória
+    let a, b;
+    if (Math.random() < 0.5) {
+        a = chosenTable;
+        b = multiplier;
+    } else {
+        a = multiplier;
+        b = chosenTable;
+    }
     const correct = a * b;
 
     // Vary question formats to keep it engaging
@@ -3711,6 +3882,19 @@ function genTabuada(diff) {
 
 function nextRound() {
     if (game.p1.hp <= 0 || game.p2.hp <= 0) return endGame();
+
+    // Decrement giant mode timers
+    ['p1', 'p2'].forEach(pid => {
+        if (game[pid].giantTimer > 0) {
+            game[pid].giantTimer--;
+            if (game[pid].giantTimer <= 0) {
+                game[pid].giantMode = false;
+                if (fighters[pid]) {
+                    fighters[pid].giantMode = false;
+                }
+            }
+        }
+    });
 
     // Reset controls
     resetControls();
@@ -3837,7 +4021,7 @@ function startAnswerTimer(pid) {
         // Tique sonoro nos últimos 5 segundos (uma vez por segundo)
         if (answerTimeLeft <= 5 && answerTimeLeft > 0) {
             const prevSecond = Math.ceil(answerTimeLeft + 0.1);
-            const curSecond  = Math.ceil(answerTimeLeft);
+            const curSecond = Math.ceil(answerTimeLeft);
             if (curSecond < prevSecond && curSecond > 0) AudioEngine.play('timerTick');
         }
 
@@ -3856,6 +4040,12 @@ function handleAnswerTimeout(pid) {
     document.getElementById(`answers-${pid}`).querySelectorAll('.ans-btn').forEach(b => b.disabled = true);
 
     game[pid].streak = 0;
+    game[pid].giantMode = false;
+    game[pid].giantTimer = 0;
+    if (fighters[pid]) {
+        fighters[pid].giantMode = false;
+        fighters[pid].giantTimer = 0;
+    }
     updateHUD();
 
     const other = pid === 'p1' ? 'p2' : 'p1';
@@ -3873,7 +4063,7 @@ function handleAnswerTimeout(pid) {
     setTimeout(() => {
         document.getElementById(`answers-${pid}`).classList.add('hidden');
         document.getElementById(`buzzer-${other}`).classList.add('hidden');
-        
+
         if (game[other].streak < 3) {
             executeAttack(other, 'normal');
         } else {
@@ -3993,7 +4183,7 @@ function handleBuzzer(pid) {
     clearBuzzerTimer();
 
     const other = pid === 'p1' ? 'p2' : 'p1';
-    
+
     // Disable buzzers
     document.getElementById(`buzzer-${pid}`).classList.add('hidden');
     document.getElementById(`buzzer-${other}`).disabled = true;
@@ -4013,11 +4203,11 @@ function handleBuzzer(pid) {
             overlay.classList.add('hidden');
         }
         if (!game.fightStarted) return;
-        
+
         overlay.classList.add('hidden');
         document.getElementById(`answers-${pid}`).classList.remove('hidden');
         document.getElementById(`buzzer-${other}`).classList.add('hidden');
-        
+
         startAnswerTimer(pid);
 
         // CPU answers if applicable
@@ -4075,7 +4265,36 @@ function handleAnswer(pid, val, btnEl) {
             return;
         }
 
-        const atkType = game[pid].streak >= 6 ? 'super' : game[pid].streak === 4 ? 'special' : 'normal';
+        let atkType = 'normal';
+        if (game[pid].streak >= 9 || game[pid].giantMode) {
+            atkType = 'ultra';
+            if (!game[pid].giantMode) {
+                game[pid].giantMode = true;
+                game[pid].giantTimer = 300;
+                const f = fighters[pid];
+                f.giantMode = true;
+                f.giantTimer = 300;
+                if (canvas) {
+                    spawnFloatingText(f.x, 0.35, '🦖 METAMORFOSE!', '#ef4444');
+                    for (let i = 0; i < 20; i++) {
+                        particles.push({
+                            x: f.x * canvas.width,
+                            y: canvas.height * 0.7,
+                            vx: (Math.random() - 0.5) * 8,
+                            vy: -Math.random() * 6 - 2,
+                            life: 40,
+                            color: ['#ef4444', '#fbbf24', '#22c55e'][Math.floor(Math.random() * 3)],
+                            size: Math.random() * 8 + 4
+                        });
+                    }
+                }
+            }
+        } else if (game[pid].streak === 7) {
+            atkType = 'super';
+        } else if (game[pid].streak === 4) {
+            atkType = 'special';
+        }
+        
         document.getElementById('question-text').textContent = '✅ CORRETO!';
         setTimeout(() => {
             document.getElementById(`answers-${pid}`).classList.add('hidden');
@@ -4084,6 +4303,12 @@ function handleAnswer(pid, val, btnEl) {
     } else {
         btnEl.classList.add('ans-wrong');
         game[pid].streak = 0;
+        game[pid].giantMode = false;
+        game[pid].giantTimer = 0;
+        if (fighters[pid]) {
+            fighters[pid].giantMode = false;
+            fighters[pid].giantTimer = 0;
+        }
         AudioEngine.play('wrong');
         updateHUD();
 
@@ -4097,7 +4322,11 @@ function handleAnswer(pid, val, btnEl) {
             return;
         }
 
-        const counterType = game[other].streak >= 6 ? 'super' : game[other].streak === 4 ? 'special' : 'normal';
+        let counterType = 'normal';
+        if (game[other].giantMode || game[other].streak >= 10) counterType = 'ultra';
+        else if (game[other].streak === 7) counterType = 'super';
+        else if (game[other].streak === 4) counterType = 'special';
+
         document.getElementById('question-text').textContent = `❌ ERROU! ${CHARACTERS[game[other].charIdx].name} ataca!`;
         setTimeout(() => {
             document.getElementById(`answers-${pid}`).classList.add('hidden');
@@ -4109,26 +4338,26 @@ function handleAnswer(pid, val, btnEl) {
 
 // ---------- SPECIAL CINEMATIC ----------
 const SPECIAL_MOVES = {
-    ryuken:     ['HADOUKEN', 1],
-    scorpius:   ['LANÇA DE FOGO', 1],
-    subfrost:   ['LANÇA DE GELO', 1],
-    gokhan:     ['GRITO EXPLOSIVO', 1],
-    veggan:     ['GALICK GUN', 1],
-    chunlei:    ['RELÂMPAGO', 1],
-    liufang:    ['BICICLETA VOADORA', 1],
-    kenfire:    ['SHORYUKEN', 1],
-    friza:      ['DISCO DA MORTE', 1],
-    kitara:     ['FAN THROW', 1],
-    sonyab:     ['SOCAR INIMIGO', 1],
-    cammyk:     ['KAMEHAMEHA', 1],
-    androida:   ['LASER MORTAL', 1],
-    milena:     ['GARRAS DA MORTE', 1],
-    zangao:     ['ENXAME MORTAL', 1],
-    blankao:    ['ELETRICIDADE SELVAGEM', 1],
-    sagao:      ['LÂMINAS DA MORTE', 1],
-    dhalsimba:  ['ESTIRAMENTO', 1],
-    capoeirista:['GINGA LETAL', 1],
-    hondalao:   ['HEADBUTT ESPACIAL', 1],
+    ryuken: ['HADOUKEN', 1],
+    scorpius: ['LANÇA DE FOGO', 1],
+    subfrost: ['LANÇA DE GELO', 1],
+    gokhan: ['GRITO EXPLOSIVO', 1],
+    veggan: ['GALICK GUN', 1],
+    chunlei: ['RELÂMPAGO', 1],
+    liufang: ['BICICLETA VOADORA', 1],
+    kenfire: ['SHORYUKEN', 1],
+    friza: ['DISCO DA MORTE', 1],
+    kitara: ['FAN THROW', 1],
+    sonyab: ['SOCAR INIMIGO', 1],
+    cammyk: ['KAMEHAMEHA', 1],
+    androida: ['LASER MORTAL', 1],
+    milena: ['GARRAS DA MORTE', 1],
+    zangao: ['ENXAME MORTAL', 1],
+    blankao: ['ELETRICIDADE SELVAGEM', 1],
+    sagao: ['LÂMINAS DA MORTE', 1],
+    dhalsimba: ['ESTIRAMENTO', 1],
+    capoeirista: ['GINGA LETAL', 1],
+    hondalao: ['HEADBUTT ESPACIAL', 1],
 };
 
 function showSpecialCinematic(pid, level, charId, charName, callback) {
@@ -4221,8 +4450,8 @@ function _doExecuteAttack(attackerId, type) {
     const defenderId = attackerId === 'p1' ? 'p2' : 'p1';
     const damage = DMG[type];
 
-    // Consume streak for special/super
-    if (type === 'special' || type === 'super') game[attackerId].streak = 0;
+    // Ultra zera no fim, os demais mantém
+    // (streak já foi zerado antes da chamada para ultra)
 
     const atkFighter = fighters[attackerId];
     const defFighter = fighters[defenderId];

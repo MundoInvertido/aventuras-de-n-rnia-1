@@ -1703,6 +1703,11 @@ button, .phase-card, .mode-card, .char-cell {
     border-color: #ea580c;
     box-shadow: 0 0 10px #f97316, 0 0 20px #ef4444;
 }
+.streak-pip.ultra {
+    background: #ef4444;
+    border-color: #dc2626;
+    box-shadow: 0 0 12px #ef4444, 0 0 24px #dc2626, 0 0 36px #b91c1c;
+}
 .streak-pip.divider {
     width: 3px;
     height: 18px;

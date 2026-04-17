@@ -1,0 +1,6 @@
+{
+  "appId": "com.mathkombat.app",
+  "appName": "Math Kombat",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

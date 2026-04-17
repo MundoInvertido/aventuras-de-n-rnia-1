@@ -1,1439 +1,331 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aventura Nárnia 3D</title>
-
-  <!-- Tailwind CSS (Estilos) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Three.js (Motor 3D) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-  <!-- React & ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-  <!-- Babel (Compilador de JSX no navegador) -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Estilos Adicionais de Animação -->
-  <style>
-    .animate-in {
-      animation-duration: 0.3s;
-      animation-fill-mode: both;
-      animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .zoom-in {
-      animation-name: zoomIn;
-    }
-
-    .slide-in-from-right {
-      animation-name: slideInRight;
-    }
-
-    @keyframes zoomIn {
-      from {
-        opacity: 0;
-        transform: scale(0.95);
-      }
-
-      to {
-        opacity: 1;
-        transform: scale(1);
-      }
-    }
-
-    @keyframes slideInRight {
-      from {
-        opacity: 0;
-        transform: translateX(40px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    /* Previne o scroll acidental na página inteira ao arrastar a câmara */
-    body {
-      margin: 0;
-      overflow: hidden;
-      touch-action: none;
-      background-color: #0f172a;
-    }
-
-    /* Confetti Animation */
-    @keyframes confettiFall {
-      0% {
-        transform: translateY(-100vh) rotate(0deg);
-        opacity: 1;
-      }
-
-      100% {
-        transform: translateY(100vh) rotate(720deg);
-        opacity: 0;
-      }
-    }
-
-    @keyframes trophyBounce {
-
-      0%,
-      100% {
-        transform: scale(1) rotate(0deg);
-      }
-
-      25% {
-        transform: scale(1.2) rotate(-5deg);
-      }
-
-      50% {
-        transform: scale(1.1) rotate(5deg);
-      }
-
-      75% {
-        transform: scale(1.15) rotate(-3deg);
-      }
-    }
-
-    .confetti-container {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 100;
-      overflow: hidden;
-    }
-
-    .confetti-piece {
-      position: absolute;
-      width: 12px;
-      height: 12px;
-      top: -20px;
-      animation: confettiFall linear forwards;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <title>Math Kombat - Números Naturais</title>
+    <link rel="stylesheet" href="css/math_kombat.css">
 </head>
 
 <body>
-  <div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
-
-    // --- ÍCONES SVG SUBSTITUTOS (Offline) ---
-    const Icon = ({ children, size = 24, className = "", fill = "none" }) => (
-      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
-    );
-
-    const Play = (p) => <Icon {...p} fill={p.fill || "none"}><polygon points="5 3 19 12 5 21 5 3"></polygon></Icon>;
-    const Pause = (p) => <Icon {...p} fill={p.fill || "none"}><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></Icon>;
-    const Square = (p) => <Icon {...p} fill={p.fill || "none"}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
-    const RotateCcw = (p) => <Icon {...p}><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></Icon>;
-    const RefreshCw = (p) => <Icon {...p}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></Icon>;
-    const CheckCircle = (p) => <Icon {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>;
-    const XCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></Icon>;
-    const AlertTriangle = (p) => <Icon {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></Icon>;
-    const Dices = (p) => <Icon {...p}><rect x="2" y="10" width="10" height="10" rx="2" ry="2"></rect><rect x="12" y="2" width="10" height="10" rx="2" ry="2"></rect><path d="M6 14h.01"></path><path d="M10 14h.01"></path><path d="M6 18h.01"></path><path d="M10 18h.01"></path><path d="M16 6h.01"></path><path d="M20 6h.01"></path><path d="M16 10h.01"></path><path d="M20 10h.01"></path></Icon>;
-    const Camera = (p) => <Icon {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></Icon>;
-    const Eye = (p) => <Icon {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></Icon>;
-    const EyeOff = (p) => <Icon {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></Icon>;
-    const MapIcon = (p) => <Icon {...p}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></Icon>;
-    const User = (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></Icon>;
-    const MousePointer2 = (p) => <Icon {...p}><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"></path></Icon>;
-
-    // --- BANCO DE PERGUNTAS ---
-    const QUESTIONS = [
-      { text: "Há 12 ovos na cartela.", answer: "contagem" },
-      { text: "A bicicleta tem 2 rodas.", answer: "contagem" },
-      { text: "A minha gata teve 4 filhotes.", answer: "contagem" },
-      { text: "A palavra 'escola' tem 6 letras.", answer: "contagem" },
-      { text: "Comprei 5 pães na padaria.", answer: "contagem" },
-      { text: "Existem 30 alunos na nossa sala.", answer: "contagem" },
-      { text: "A aranha possui 8 patas.", answer: "contagem" },
-      { text: "Ganhei 3 cadernos novos.", answer: "contagem" },
-      { text: "Faltam 10 dias para as férias.", answer: "contagem" },
-      { text: "O relógio tem 3 ponteiros.", answer: "contagem" },
-      { text: "Fui o 1º aluno a terminar o teste.", answer: "ordenacao" },
-      { text: "O consultório fica no 3º andar do prédio.", answer: "ordenacao" },
-      { text: "Ele é o 2º filho da família.", answer: "ordenacao" },
-      { text: "A minha equipa ficou em 4º lugar no torneio.", answer: "ordenacao" },
-      { text: "Sentei-me na 3ª fila do cinema.", answer: "ordenacao" },
-      { text: "Hoje é o 5º dia da semana.", answer: "ordenacao" },
-      { text: "Moro na 10ª casa da rua.", answer: "ordenacao" },
-      { text: "Este é o meu 2º par de sapatilhas.", answer: "ordenacao" },
-      { text: "Fiquei em 8º na corrida de sacos.", answer: "ordenacao" },
-      { text: "Esta é a 1ª vez que venho aqui.", answer: "ordenacao" },
-      { text: "A garrafa contém 2 litros de água.", answer: "medida" },
-      { text: "O pacote de feijão pesa 1 kg.", answer: "medida" },
-      { text: "A viagem até à praia durou 4 horas.", answer: "medida" },
-      { text: "A temperatura máxima hoje será de 30 graus.", answer: "medida" },
-      { text: "O muro da escola tem 3 metros de altura.", answer: "medida" },
-      { text: "Comprei 500 gramas de queijo.", answer: "medida" },
-      { text: "O meu lápis tem 15 centímetros.", answer: "medida" },
-      { text: "O campo tem 20 metros de comprimento.", answer: "medida" },
-      { text: "Fiz um bolo e usei 2 chávenas de farinha.", answer: "medida" },
-      { text: "Fiquei 30 minutos na fila da cantina.", answer: "medida" },
-      { text: "O código postal da minha rua é 1234-000.", answer: "codigo" },
-      { text: "O meu número de telefone é 91234-5678.", answer: "codigo" },
-      { text: "A matrícula do carro do meu pai é XY-98-76.", answer: "codigo" },
-      { text: "O código de barras do produto é 7891011.", answer: "codigo" },
-      { text: "O autocarro que vai para o centro é a carreira 478.", answer: "codigo" },
-      { text: "A password do Wi-Fi é 2024abc.", answer: "codigo" },
-      { text: "Moro na porta número 150.", answer: "codigo" },
-      { text: "O meu Cartão de Cidadão é 12345678.", answer: "codigo" },
-      { text: "O canal de desenhos animados é o 45.", answer: "codigo" },
-      { text: "O número de estudante é 2026001.", answer: "codigo" },
-    ];
-
-    const TRACK_LENGTH = 30;
-
-    const SPECIAL_TILES = {
-      5: { type: 'advance', value: 2, text: "Encontraste um atalho! Avança 2 casas." },
-      9: { type: 'back', value: -3, text: "Escorregaste na lama! Recua 3 casas." },
-      14: { type: 'advance', value: 3, text: "Botas mágicas! Avança 3 casas." },
-      19: { type: 'back', value: -4, text: "Perdeste-te na floresta! Recua 4 casas." },
-      24: { type: 'reset', value: 0, text: "Caíste num buraco! Volta ao INÍCIO." },
-      27: { type: 'advance', value: 2, text: "Vento favorável! Avança 2 casas." },
-    };
-
-    // --- MUNDOS DE NÁRNIA ---
-    const WORLDS = {
-      floresta: { id: 'floresta', name: 'Floresta de Lanterna', icon: '🌲', desc: 'A floresta mágica onde tudo começou', sky: 0x38bdf8, fog: 0x38bdf8, ground: 0x4ade80, groundRough: 1, lake: true, lamppost: true },
-      neve: { id: 'neve', name: 'Inverno Eterno', icon: '❄️', desc: 'O reino congelado da Feiticeira Branca', sky: 0xc7d2fe, fog: 0xc7d2fe, ground: 0xe2e8f0, groundRough: 0.3, lake: false, lamppost: true },
-      deserto: { id: 'deserto', name: 'Deserto de Calormen', icon: '🏜️', desc: 'As areias quentes do sul', sky: 0xfbbf24, fog: 0xfde68a, ground: 0xd4a067, groundRough: 0.9, lake: false, lamppost: false },
-      mar: { id: 'mar', name: 'Mar das Ilhas Solitárias', icon: '⛵', desc: 'Navega pelo grande mar oriental', sky: 0x0ea5e9, fog: 0x06b6d4, ground: 0x22d3ee, groundRough: 0.05, lake: false, lamppost: false },
-      castelo: { id: 'castelo', name: 'Castelo de Cair Paravel', icon: '🏰', desc: 'O glorioso castelo dos reis e rainhas', sky: 0x7c3aed, fog: 0x7c3aed, ground: 0x6b8e23, groundRough: 0.8, lake: true, lamppost: true },
-    };
-
-    // --- PERSONAGENS DISPONÍVEIS ---
-    const CHARACTERS = {
-      ripchip: { id: 'ripchip', name: 'Ripchip (Rato)', icon: '🐭', color: '#dc2626' },
-      topeira: { id: 'topeira', name: 'Topeira', icon: '🐾', color: '#78350f' },
-      anao: { id: 'anao', name: 'Anão (Trumpkin)', icon: '🧔', color: '#ea580c' },
-      cavalo: { id: 'cavalo', name: 'Cavalo (Bri)', icon: '🐴', color: '#8b4513' },
-      coruja: { id: 'coruja', name: 'Coruja (Plumante)', icon: '🦉', color: '#475569' },
-      castor: { id: 'castor', name: 'Sr. Castor', icon: '🦫', color: '#92400e' },
-      fauno: { id: 'fauno', name: 'Fauno (Tumnus)', icon: '🐐', color: '#16a34a' },
-      centauro: { id: 'centauro', name: 'Centauro', icon: '🐎', color: '#a16207' },
-      leao: { id: 'leao', name: 'Leão (Aslan)', icon: '🦁', color: '#fbbf24' },
-      feiticeira: { id: 'feiticeira', name: 'Feiticeira Branca', icon: '🧙‍♀️', color: '#38bdf8' }
-    };
-
-    function App() {
-      const mountRef = useRef(null);
-
-      // Estados em React
-      const [gameState, setGameState] = useState('select_p1'); // select_p1, select_p2, select_world, start, question, dice, event, end
-      const [p1Char, setP1Char] = useState(null);
-      const [p2Char, setP2Char] = useState(null);
-      const [selectedWorld, setSelectedWorld] = useState('floresta');
-
-      const [player1Pos, setPlayer1Pos] = useState(0);
-      const [player2Pos, setPlayer2Pos] = useState(0);
-      const [currentPlayer, setCurrentPlayer] = useState(1);
-      const [currentQuestion, setCurrentQuestion] = useState(null);
-      const [feedback, setFeedback] = useState(null);
-      const [specialEvent, setSpecialEvent] = useState(null);
-      const [winner, setWinner] = useState(null);
-      const [diceValue, setDiceValue] = useState(1);
-      const [isRolling, setIsRolling] = useState(false);
-
-      const [cameraView, setCameraView] = useState('thirdPerson');
-      const [isQuestionMinimized, setIsQuestionMinimized] = useState(false);
-      const [isPaused, setIsPaused] = useState(false);
-      const [timeLeft, setTimeLeft] = useState(20);
-      const [p1Score, setP1Score] = useState(0);
-      const [p2Score, setP2Score] = useState(0);
-      const [p1Correct, setP1Correct] = useState(0);
-      const [p1Wrong, setP1Wrong] = useState(0);
-      const [p2Correct, setP2Correct] = useState(0);
-      const [p2Wrong, setP2Wrong] = useState(0);
-
-      // Refs de sincronização com o Three.js
-      const targetPositions = useRef([0, 0]);
-      const cameraTargetPlayer = useRef(1);
-      const cameraViewRef = useRef('thirdPerson');
-      const reactionRef = useRef({ player: null, type: null, time: 0 });
-      const p1CharRef = useRef('ripchip');
-      const p2CharRef = useRef('topeira');
-      const isThreeReady = useRef(false);
-      const isAnimating = useRef([false, false]);
-
-      // Inicializa o Motor 3D (Apenas quando sai da seleção de personagens)
-      useEffect(() => {
-        if (gameState === 'select_p1' || gameState === 'select_p2' || gameState === 'select_world') return;
-
-        let isMounted = true;
-        let scene, camera, renderer, animationId;
-        let p1Mesh, p2Mesh, tileCoords = [];
-        let currentLookTarget = null;
-
-        // Controlo de Câmara
-        let currentSpherical = null;
-        let targetSpherical = null;
-        let prevCameraView = 'thirdPerson';
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-
-        const initThree = () => {
-          if (!isMounted || !mountRef.current || isThreeReady.current) return;
-          const THREE = window.THREE;
-
-          currentLookTarget = new THREE.Vector3(0, 0, 0);
-          currentSpherical = new THREE.Spherical(14, Math.PI / 3, 0);
-          targetSpherical = new THREE.Spherical(14, Math.PI / 3, 0);
-
-          // Cenário Base - Mundo selecionado
-          const worldTheme = WORLDS[selectedWorld] || WORLDS.floresta;
-          scene = new THREE.Scene();
-          scene.background = new THREE.Color(worldTheme.sky);
-          scene.fog = new THREE.Fog(worldTheme.fog, 50, 180);
-
-          camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-          renderer = new THREE.WebGLRenderer({ antialias: true });
-          renderer.setSize(window.innerWidth, window.innerHeight);
-          renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          mountRef.current.innerHTML = '';
-          mountRef.current.appendChild(renderer.domElement);
-
-          const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.7);
-          hemiLight.position.set(0, 200, 0);
-          scene.add(hemiLight);
-
-          const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-          dirLight.position.set(60, 120, 50);
-          dirLight.castShadow = true;
-          dirLight.shadow.mapSize.width = 2048;
-          dirLight.shadow.mapSize.height = 2048;
-          dirLight.shadow.camera.top = 100; dirLight.shadow.camera.bottom = -100;
-          dirLight.shadow.camera.left = -100; dirLight.shadow.camera.right = 100;
-          scene.add(dirLight);
-
-          // Chão
-          const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(350, 350),
-            new THREE.MeshStandardMaterial({ color: worldTheme.ground, roughness: worldTheme.groundRough, metalness: 0 })
-          );
-          ground.rotation.x = -Math.PI / 2;
-          ground.receiveShadow = true;
-          scene.add(ground);
-
-          // Luz extra para mundos escuros
-          if (selectedWorld === 'neve') {
-            const ambientBoost = new THREE.AmbientLight(0xddeeff, 0.4);
-            scene.add(ambientBoost);
-          } else if (selectedWorld === 'deserto') {
-            dirLight.intensity = 1.6;
-            dirLight.color.set(0xfff0d6);
-          } else if (selectedWorld === 'mar') {
-            const ambientBlue = new THREE.AmbientLight(0x87ceeb, 0.3);
-            scene.add(ambientBlue);
-          } else if (selectedWorld === 'castelo') {
-            dirLight.color.set(0xe8d4f0);
-          }
-
-          // Lago (condicional ao mundo)
-          if (worldTheme.lake) {
-            const lake = new THREE.Mesh(
-              new THREE.CircleGeometry(30, 64),
-              new THREE.MeshStandardMaterial({ color: selectedWorld === 'neve' ? 0x93c5fd : 0x3b82f6, roughness: 0.1, metalness: 0.2 })
-            );
-            lake.rotation.x = -Math.PI / 2;
-            lake.position.set(-15, 0.1, -45);
-            scene.add(lake);
-          }
-
-          // Trilha Sinuosa
-          const curve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(0, 0, 15), new THREE.Vector3(12, 0, 0), new THREE.Vector3(30, 0, -5),
-            new THREE.Vector3(25, 0, -25), new THREE.Vector3(0, 0, -35), new THREE.Vector3(-25, 0, -15),
-            new THREE.Vector3(-35, 0, 15), new THREE.Vector3(-15, 0, 35), new THREE.Vector3(15, 0, 40),
-            new THREE.Vector3(45, 0, 20), new THREE.Vector3(50, 0, -20), new THREE.Vector3(30, 0, -55),
-          ]);
-          tileCoords = curve.getPoints(TRACK_LENGTH);
-
-          const createTileTexture = (num, type) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = type === 'reset' ? '#ef4444' : type === 'advance' ? '#4ade80' : type === 'back' ? '#fb923c' : '#d97706';
-            ctx.fillRect(0, 0, 128, 128);
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 55px sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(num, 64, 64);
-            return new THREE.CanvasTexture(canvas);
-          };
-
-          const tileGeo = new THREE.CylinderGeometry(2.8, 2.8, 0.6, 32);
-          for (let i = 0; i <= TRACK_LENGTH; i++) {
-            const isSpecial = SPECIAL_TILES[i];
-            const type = isSpecial ? isSpecial.type : 'normal';
-            const label = i === 0 ? "INÍCIO" : i === TRACK_LENGTH ? "FIM" : i.toString();
-
-            const sideMat = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.9 });
-            const topMat = new THREE.MeshStandardMaterial({ map: createTileTexture(label, type), roughness: 0.8 });
-
-            const tile = new THREE.Mesh(tileGeo, [sideMat, topMat, sideMat]);
-            tile.position.copy(tileCoords[i]);
-            tile.position.y = 0.3;
-            tile.receiveShadow = true;
-            tile.castShadow = true;
-            scene.add(tile);
-          }
-
-          // Elementos Decorativos do Mundo de Nárnia
-          const createCuteTree = () => {
-            const tree = new THREE.Group();
-            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 3, 12), new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 1 }));
-            trunk.position.y = 1.5; trunk.castShadow = true;
-            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
-            const leaf1 = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), leavesMat);
-            leaf1.position.set(0, 4, 0); leaf1.castShadow = true;
-            const leaf2 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), leavesMat);
-            leaf2.position.set(1.5, 3.2, 0.5); leaf2.castShadow = true;
-            const leaf3 = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), leavesMat);
-            leaf3.position.set(-1.2, 3.5, -1); leaf3.castShadow = true;
-            tree.add(trunk, leaf1, leaf2, leaf3);
-            return tree;
-          };
-
-          const createPineTree = () => {
-            const pine = new THREE.Group();
-            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 2.5, 8), new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 1 }));
-            trunk.position.y = 1.25; trunk.castShadow = true;
-            pine.add(trunk);
-            const pineMat = new THREE.MeshStandardMaterial({ color: 0x1a5c2a, roughness: 0.85 });
-            for (let i = 0; i < 3; i++) {
-              const c = new THREE.Mesh(new THREE.ConeGeometry(2.5 - i * 0.6, 2.5, 12), pineMat);
-              c.position.y = 3 + i * 1.6; c.castShadow = true;
-              pine.add(c);
-            }
-            // Snow cap
-            const snow = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.0, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
-            snow.position.y = 7.5; pine.add(snow);
-            return pine;
-          };
-
-          const createBush = () => {
-            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.9 }));
-            bush.scale.set(1, 0.7, 1);
-            bush.position.y = 0.8;
-            bush.castShadow = true;
-            return bush;
-          };
-
-          const createRock = () => {
-            const rock = new THREE.Group();
-            const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.95 });
-            const main = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 6), rockMat);
-            main.scale.set(1, 0.6, 0.9); main.position.y = 0.5; main.castShadow = true;
-            rock.add(main);
-            const small = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 5), rockMat);
-            small.position.set(0.8, 0.3, 0.4); small.castShadow = true;
-            rock.add(small);
-            return rock;
-          };
-
-          const createFlowerPatch = () => {
-            const patch = new THREE.Group();
-            const colors = [0xff6b9d, 0xfbbf24, 0xc084fc, 0x60a5fa, 0xf87171];
-            for (let i = 0; i < 5; i++) {
-              const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0x22c55e }));
-              stem.position.set((Math.random() - 0.5) * 1.5, 0.3, (Math.random() - 0.5) * 1.5);
-              patch.add(stem);
-              const flower = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: colors[i] }));
-              flower.position.set(stem.position.x, 0.65, stem.position.z);
-              patch.add(flower);
-            }
-            return patch;
-          };
-
-          const createMushroom = () => {
-            const mush = new THREE.Group();
-            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.5, 8), new THREE.MeshStandardMaterial({ color: 0xfef3c7 }));
-            stem.position.y = 0.25; mush.add(stem);
-            const cap = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 8), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
-            cap.scale.set(1, 0.5, 1); cap.position.y = 0.55; cap.castShadow = true;
-            mush.add(cap);
-            // White dots on cap
-            for (let i = 0; i < 4; i++) {
-              const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-              const a = (i / 4) * Math.PI * 2;
-              dot.position.set(Math.cos(a) * 0.25, 0.65, Math.sin(a) * 0.25);
-              mush.add(dot);
-            }
-            return mush;
-          };
-
-          // Lamppost (Nárnia iconic)
-          const createLamppost = () => {
-            const lamp = new THREE.Group();
-            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 6, 8), new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.6, roughness: 0.3 }));
-            pole.position.y = 3; pole.castShadow = true; lamp.add(pole);
-            // Lantern box
-            const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.5 }));
-            lantern.position.y = 6.2; lamp.add(lantern);
-            // Light glow
-            const glow = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 2 }));
-            glow.position.y = 6.2; lamp.add(glow);
-            // Point light
-            const pLight = new THREE.PointLight(0xfbbf24, 1.5, 20);
-            pLight.position.y = 6.2; lamp.add(pLight);
-            // Roof
-            const roof = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.4, 4), new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.5 }));
-            roof.position.y = 6.7; roof.rotation.y = Math.PI / 4; lamp.add(roof);
-            return lamp;
-          };
-
-          // Place lamppost at a prominent location
-          const lamppost = createLamppost();
-          lamppost.position.set(-8, 0, 20);
-          scene.add(lamppost);
-
-          // Place diverse decorations
-          for (let i = 0; i < 120; i++) {
-            const x = (Math.random() - 0.5) * 220;
-            const z = (Math.random() - 0.5) * 220;
-            if (!tileCoords.some(pt => pt.distanceTo(new THREE.Vector3(x, 0, z)) < 8)) {
-              const r = Math.random();
-              let prop;
-              if (r < 0.25) prop = createCuteTree();
-              else if (r < 0.4) prop = createPineTree();
-              else if (r < 0.55) prop = createBush();
-              else if (r < 0.7) prop = createRock();
-              else if (r < 0.82) prop = createFlowerPatch();
-              else prop = createMushroom();
-              prop.position.set(x, 0, z);
-              const s = 0.4 + Math.random() * 0.7;
-              prop.scale.set(s, s, s);
-              scene.add(prop);
-            }
-          }
-
-          // --- GERADOR DE PERSONAGENS 3D (Modelos 3D com primitivas) ---
-          const _M = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: opts.r || 0.6, metalness: opts.m || 0.1 });
-          const _sphere = (r, c, pos, rot) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 16), _M(c)); m.position.set(...pos); if (rot) m.rotation.set(...rot); m.castShadow = true; return m; };
-          const _cyl = (rt, rb, h, c, pos, rot) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 16), _M(c)); m.position.set(...pos); if (rot) m.rotation.set(...rot); m.castShadow = true; return m; };
-          const _cone = (r, h, c, pos, rot) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16), _M(c)); m.position.set(...pos); if (rot) m.rotation.set(...rot); m.castShadow = true; return m; };
-          const _box = (w, h, d, c, pos, rot) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _M(c)); m.position.set(...pos); if (rot) m.rotation.set(...rot); m.castShadow = true; return m; };
-          const _torus = (r, t, c, pos, rot) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, t, 8, 24), _M(c, { m: 0.7 })); m.position.set(...pos); if (rot) m.rotation.set(...rot); return m; };
-          const _addEyes = (g, y, sep, sz) => {
-            g.add(_sphere(sz, '#111', [-sep, y, 0.7]));
-            g.add(_sphere(sz, '#111', [sep, y, 0.7]));
-            g.add(_sphere(sz * 0.4, '#fff', [-sep + sz * 0.3, y + sz * 0.3, 0.9]));
-            g.add(_sphere(sz * 0.4, '#fff', [sep + sz * 0.3, y + sz * 0.3, 0.9]));
-          };
-
-          const buildCharacterStandee = (id) => {
-            const charData = CHARACTERS[id] || CHARACTERS['ripchip'];
-            const g = new THREE.Group();
-            g.add(_cyl(1.4, 1.6, 0.4, charData.color, [0, 0.2, 0]));
-            g.add(_torus(1.45, 0.1, '#fbbf24', [0, 0.4, 0], [Math.PI / 2, 0, 0]));
-
-            const body = new THREE.Group();
-            body.position.y = 0.5;
-
-            switch (id) {
-              case 'ripchip': {
-                body.add(_sphere(0.7, '#d4b8a0', [0, 1.8, 0]));
-                body.add(_sphere(0.35, '#f0b8a8', [-0.55, 2.4, 0]));
-                body.add(_sphere(0.35, '#f0b8a8', [0.55, 2.4, 0]));
-                body.add(_sphere(0.2, '#e8a0a0', [-0.55, 2.4, 0.15]));
-                body.add(_sphere(0.2, '#e8a0a0', [0.55, 2.4, 0.15]));
-                body.add(_sphere(0.15, '#ff8888', [0, 1.55, 0.65]));
-                _addEyes(body, 1.95, 0.25, 0.12);
-                body.add(_cyl(0.55, 0.5, 1.0, '#daa520', [0, 0.8, 0]));
-                body.add(_sphere(0.58, '#c8960c', [0, 1.1, 0]));
-                body.add(_cyl(0.15, 0.12, 0.5, '#d4b8a0', [-0.2, 0.25, 0]));
-                body.add(_cyl(0.15, 0.12, 0.5, '#d4b8a0', [0.2, 0.25, 0]));
-                body.add(_box(0.08, 1.2, 0.04, '#c0c0c0', [0.7, 1.8, 0]));
-                body.add(_box(0.35, 0.1, 0.1, '#daa520', [0.7, 1.1, 0]));
-                body.add(_cyl(0.06, 0.06, 0.3, '#8b4513', [0.7, 0.9, 0]));
-                body.add(_cyl(0.04, 0.02, 1.2, '#d4b8a0', [0, 0.6, -0.5], [0.5, 0, 0]));
-                break;
-              }
-              case 'topeira': {
-                body.add(_sphere(0.9, '#6b4226', [0, 1.2, 0]));
-                body.add(_sphere(0.55, '#c8a882', [0, 1.0, 0.35]));
-                body.add(_sphere(0.65, '#7a5230', [0, 2.1, 0]));
-                body.add(_sphere(0.3, '#c8a882', [0, 1.85, 0.45]));
-                body.add(_sphere(0.15, '#ff6699', [0, 1.85, 0.72]));
-                _addEyes(body, 2.2, 0.22, 0.08);
-                body.add(_sphere(0.25, '#5a3820', [-0.7, 1.5, 0.3]));
-                body.add(_sphere(0.25, '#5a3820', [0.7, 1.5, 0.3]));
-                body.add(_sphere(0.22, '#5a3820', [-0.3, 0.2, 0.2]));
-                body.add(_sphere(0.22, '#5a3820', [0.3, 0.2, 0.2]));
-                body.add(_torus(0.55, 0.12, '#4488cc', [0, 1.65, 0.1], [0.3, 0, 0]));
-                break;
-              }
-              case 'anao': {
-                body.add(_cyl(0.65, 0.6, 1.2, '#8b7355', [0, 0.9, 0]));
-                body.add(_sphere(0.68, '#8b7355', [0, 1.3, 0]));
-                body.add(_torus(0.6, 0.08, '#8b4513', [0, 0.5, 0], [Math.PI / 2, 0, 0]));
-                body.add(_box(0.15, 0.15, 0.15, '#daa520', [0, 0.5, 0.6]));
-                body.add(_sphere(0.6, '#f0c8a0', [0, 2.0, 0]));
-                body.add(_sphere(0.5, '#d4650a', [0, 1.6, 0.25]));
-                body.add(_cone(0.4, 0.8, '#d4650a', [0, 1.2, 0.3]));
-                body.add(_sphere(0.5, '#777', [0, 2.35, 0]));
-                body.add(_cone(0.15, 0.4, '#888', [0, 2.7, 0]));
-                _addEyes(body, 2.1, 0.2, 0.1);
-                body.add(_sphere(0.12, '#e0a880', [0, 1.88, 0.55]));
-                body.add(_cyl(0.22, 0.25, 0.5, '#5a4230', [-0.25, 0.2, 0]));
-                body.add(_cyl(0.22, 0.25, 0.5, '#5a4230', [0.25, 0.2, 0]));
-                body.add(_cyl(0.05, 0.05, 1.8, '#8b6914', [0.85, 1.5, 0]));
-                body.add(_box(0.5, 0.35, 0.08, '#aaa', [0.85, 2.3, 0]));
-                break;
-              }
-              case 'cavalo': {
-                const torso = _cyl(0.7, 0.65, 1.6, '#6b3a1f', [0, 1.2, 0]);
-                torso.rotation.z = Math.PI / 2; body.add(torso);
-                body.add(_cyl(0.35, 0.4, 1.0, '#7a4422', [0.5, 2.0, 0], [-0.5, 0, 0]));
-                body.add(_sphere(0.45, '#7a4422', [0.6, 2.6, 0]));
-                body.add(_sphere(0.25, '#c8a882', [0.6, 2.4, 0.3]));
-                // Eyes on the horse head (offset to x=0.6)
-                body.add(_sphere(0.08, '#331a00', [0.42, 2.7, 0.3]));
-                body.add(_sphere(0.08, '#331a00', [0.78, 2.7, 0.3]));
-                body.add(_sphere(0.03, '#fff', [0.44, 2.72, 0.36]));
-                body.add(_sphere(0.03, '#fff', [0.80, 2.72, 0.36]));
-                // Nostrils
-                body.add(_sphere(0.05, '#444', [0.53, 2.35, 0.45]));
-                body.add(_sphere(0.05, '#444', [0.67, 2.35, 0.45]));
-                body.add(_cone(0.1, 0.3, '#6b3a1f', [0.45, 3.0, 0]));
-                body.add(_cone(0.1, 0.3, '#6b3a1f', [0.75, 3.0, 0]));
-                for (let i = 0; i < 5; i++) body.add(_sphere(0.15, '#3a1a08', [0.5 - i * 0.1, 2.8 - i * 0.15, -0.15]));
-                body.add(_cyl(0.12, 0.1, 1.0, '#6b3a1f', [-0.5, 0.3, 0.2]));
-                body.add(_cyl(0.12, 0.1, 1.0, '#6b3a1f', [-0.5, 0.3, -0.2]));
-                body.add(_cyl(0.12, 0.1, 1.0, '#6b3a1f', [0.3, 0.3, 0.2]));
-                body.add(_cyl(0.12, 0.1, 1.0, '#6b3a1f', [0.3, 0.3, -0.2]));
-                body.add(_cyl(0.13, 0.14, 0.15, '#333', [-0.5, -0.15, 0.2]));
-                body.add(_cyl(0.13, 0.14, 0.15, '#333', [-0.5, -0.15, -0.2]));
-                body.add(_cyl(0.13, 0.14, 0.15, '#333', [0.3, -0.15, 0.2]));
-                body.add(_cyl(0.13, 0.14, 0.15, '#333', [0.3, -0.15, -0.2]));
-                body.add(_cyl(0.08, 0.03, 1.0, '#3a1a08', [-0.9, 1.6, 0], [0, 0, 0.8]));
-                break;
-              }
-              case 'coruja': {
-                body.add(_sphere(0.75, '#8b7355', [0, 1.2, 0]));
-                body.add(_sphere(0.45, '#d4c8a0', [0, 1.0, 0.35]));
-                body.add(_sphere(0.6, '#7a6644', [0, 2.1, 0]));
-                body.add(_sphere(0.3, '#e8dcc0', [-0.2, 2.1, 0.35]));
-                body.add(_sphere(0.3, '#e8dcc0', [0.2, 2.1, 0.35]));
-                body.add(_sphere(0.18, '#ffcc00', [-0.2, 2.15, 0.5]));
-                body.add(_sphere(0.18, '#ffcc00', [0.2, 2.15, 0.5]));
-                body.add(_sphere(0.1, '#111', [-0.2, 2.15, 0.62]));
-                body.add(_sphere(0.1, '#111', [0.2, 2.15, 0.62]));
-                body.add(_cone(0.1, 0.2, '#e8a020', [0, 1.95, 0.55], [Math.PI / 2, 0, 0]));
-                body.add(_cone(0.12, 0.35, '#5a4a30', [-0.35, 2.6, 0], [0, 0, 0.3]));
-                body.add(_cone(0.12, 0.35, '#5a4a30', [0.35, 2.6, 0], [0, 0, -0.3]));
-                const wL = _sphere(0.5, '#6b5533', [-0.8, 1.4, -0.1]); wL.scale.set(0.5, 1.2, 0.8); body.add(wL);
-                const wR = _sphere(0.5, '#6b5533', [0.8, 1.4, -0.1]); wR.scale.set(0.5, 1.2, 0.8); body.add(wR);
-                body.add(_sphere(0.15, '#e8a020', [-0.2, 0.15, 0.2]));
-                body.add(_sphere(0.15, '#e8a020', [0.2, 0.15, 0.2]));
-                break;
-              }
-              case 'castor': {
-                body.add(_sphere(0.85, '#7a5230', [0, 1.2, 0]));
-                body.add(_sphere(0.5, '#c8a872', [0, 1.0, 0.35]));
-                body.add(_sphere(0.6, '#8b6340', [0, 2.1, 0]));
-                body.add(_sphere(0.25, '#c8a872', [-0.3, 1.9, 0.35]));
-                body.add(_sphere(0.25, '#c8a872', [0.3, 1.9, 0.35]));
-                body.add(_box(0.08, 0.18, 0.06, '#fff', [-0.06, 1.72, 0.55]));
-                body.add(_box(0.08, 0.18, 0.06, '#fff', [0.06, 1.72, 0.55]));
-                body.add(_sphere(0.1, '#333', [0, 1.88, 0.55]));
-                _addEyes(body, 2.15, 0.2, 0.1);
-                body.add(_sphere(0.12, '#6b4a28', [-0.42, 2.5, 0]));
-                body.add(_sphere(0.12, '#6b4a28', [0.42, 2.5, 0]));
-                body.add(_torus(0.55, 0.12, '#3366bb', [0, 1.65, 0.05], [0.2, 0, 0]));
-                body.add(_sphere(0.2, '#5a3820', [-0.65, 1.4, 0.3]));
-                body.add(_sphere(0.2, '#5a3820', [0.65, 1.4, 0.3]));
-                const tail = _box(0.5, 0.1, 0.3, '#5a3820', [0, 0.4, -0.8]);
-                tail.scale.set(1, 1, 1.5); body.add(tail);
-                body.add(_sphere(0.2, '#5a3820', [-0.3, 0.15, 0.2]));
-                body.add(_sphere(0.2, '#5a3820', [0.3, 0.15, 0.2]));
-                break;
-              }
-              case 'fauno': {
-                body.add(_cyl(0.18, 0.12, 0.7, '#8b6340', [-0.2, 0.35, 0]));
-                body.add(_cyl(0.18, 0.12, 0.7, '#8b6340', [0.2, 0.35, 0]));
-                body.add(_sphere(0.14, '#3a2010', [-0.2, 0.0, 0.05]));
-                body.add(_sphere(0.14, '#3a2010', [0.2, 0.0, 0.05]));
-                body.add(_cyl(0.45, 0.4, 1.0, '#deb887', [0, 1.2, 0]));
-                body.add(_sphere(0.5, '#f0c8a0', [0, 2.1, 0]));
-                for (let i = 0; i < 6; i++) body.add(_sphere(0.18, '#5a3a1a', [(i - 2.5) * 0.15, 2.5, -0.1 + Math.sin(i) * 0.1]));
-                body.add(_cone(0.08, 0.5, '#a08060', [-0.25, 2.7, -0.05], [0, 0, 0.2]));
-                body.add(_cone(0.08, 0.5, '#a08060', [0.25, 2.7, -0.05], [0, 0, -0.2]));
-                body.add(_cone(0.08, 0.25, '#f0c8a0', [-0.5, 2.15, 0], [0, 0, Math.PI / 3]));
-                body.add(_cone(0.08, 0.25, '#f0c8a0', [0.5, 2.15, 0], [0, 0, -Math.PI / 3]));
-                _addEyes(body, 2.15, 0.18, 0.08);
-                body.add(_sphere(0.08, '#dab090', [0, 2.0, 0.48]));
-                body.add(_torus(0.42, 0.1, '#228844', [0, 1.6, 0.05], [0.2, 0, 0]));
-                body.add(_box(0.12, 0.5, 0.06, '#228844', [-0.35, 1.3, 0.15]));
-                break;
-              }
-              case 'centauro': {
-                const cB = _cyl(0.6, 0.55, 1.4, '#7a4422', [0, 1.0, 0]);
-                cB.rotation.z = Math.PI / 2; body.add(cB);
-                body.add(_cyl(0.1, 0.08, 0.8, '#7a4422', [-0.4, 0.3, 0.2]));
-                body.add(_cyl(0.1, 0.08, 0.8, '#7a4422', [-0.4, 0.3, -0.2]));
-                body.add(_cyl(0.1, 0.08, 0.8, '#7a4422', [0.3, 0.3, 0.2]));
-                body.add(_cyl(0.1, 0.08, 0.8, '#7a4422', [0.3, 0.3, -0.2]));
-                body.add(_cyl(0.11, 0.12, 0.12, '#333', [-0.4, -0.08, 0.2]));
-                body.add(_cyl(0.11, 0.12, 0.12, '#333', [-0.4, -0.08, -0.2]));
-                body.add(_cyl(0.11, 0.12, 0.12, '#333', [0.3, -0.08, 0.2]));
-                body.add(_cyl(0.11, 0.12, 0.12, '#333', [0.3, -0.08, -0.2]));
-                body.add(_cyl(0.35, 0.4, 1.0, '#deb887', [0.5, 1.8, 0]));
-                body.add(_sphere(0.4, '#deb887', [0.5, 2.6, 0]));
-                body.add(_sphere(0.35, '#3a2010', [0.5, 2.85, -0.05]));
-                _addEyes(body, 2.65, 0.14, 0.07);
-                body.add(_cyl(0.04, 0.04, 1.5, '#8b6914', [1.1, 2.2, 0], [0, 0, 0.15]));
-                body.add(_cyl(0.06, 0.02, 0.8, '#3a2010', [-0.8, 1.3, 0], [0, 0, 0.7]));
-                break;
-              }
-              case 'leao': {
-                body.add(_sphere(0.9, '#daa520', [0, 1.3, 0]));
-                for (let a = 0; a < Math.PI * 2; a += 0.5) body.add(_sphere(0.35, '#c8860a', [Math.cos(a) * 0.65, 2.2 + Math.sin(a) * 0.5, Math.sin(a) * 0.3]));
-                for (let a = 0; a < Math.PI * 2; a += 0.7) body.add(_sphere(0.25, '#b07808', [Math.cos(a) * 0.8, 2.0 + Math.sin(a) * 0.6, Math.sin(a) * 0.4]));
-                body.add(_sphere(0.55, '#eaaa30', [0, 2.2, 0.15]));
-                body.add(_sphere(0.25, '#f0d080', [0, 2.0, 0.5]));
-                body.add(_sphere(0.1, '#8b4513', [0, 2.05, 0.7]));
-                body.add(_sphere(0.12, '#8b6508', [-0.2, 2.3, 0.45]));
-                body.add(_sphere(0.12, '#8b6508', [0.2, 2.3, 0.45]));
-                body.add(_sphere(0.07, '#111', [-0.2, 2.3, 0.52]));
-                body.add(_sphere(0.07, '#111', [0.2, 2.3, 0.52]));
-                body.add(_cyl(0.18, 0.2, 0.7, '#daa520', [-0.35, 0.3, 0.25]));
-                body.add(_cyl(0.18, 0.2, 0.7, '#daa520', [0.35, 0.3, 0.25]));
-                body.add(_cyl(0.18, 0.2, 0.7, '#daa520', [-0.35, 0.3, -0.25]));
-                body.add(_cyl(0.18, 0.2, 0.7, '#daa520', [0.35, 0.3, -0.25]));
-                body.add(_cyl(0.05, 0.03, 1.2, '#c8960c', [0, 0.8, -0.7], [0.7, 0, 0]));
-                body.add(_sphere(0.15, '#8b5a00', [0, 0.4, -1.3]));
-                break;
-              }
-              case 'feiticeira': {
-                body.add(_cone(1.0, 2.0, '#b8d8f0', [0, 1.0, 0]));
-                body.add(_torus(0.7, 0.05, '#e8f4ff', [0, 0.8, 0], [Math.PI / 2, 0, 0]));
-                body.add(_torus(0.5, 0.04, '#d0e8ff', [0, 1.2, 0], [Math.PI / 2, 0, 0]));
-                body.add(_cyl(0.3, 0.35, 0.6, '#d0e8f0', [0, 2.2, 0]));
-                body.add(_sphere(0.4, '#f0e8f0', [0, 2.8, 0]));
-                body.add(_sphere(0.38, '#d0d8e0', [0, 3.0, -0.1]));
-                const hL = _sphere(0.2, '#d0d8e0', [-0.35, 2.5, 0]); hL.scale.set(0.8, 1.5, 0.8); body.add(hL);
-                const hR = _sphere(0.2, '#d0d8e0', [0.35, 2.5, 0]); hR.scale.set(0.8, 1.5, 0.8); body.add(hR);
-                body.add(_cone(0.08, 0.5, '#a8d8f8', [-0.15, 3.5, 0]));
-                body.add(_cone(0.1, 0.7, '#a8d8f8', [0, 3.6, 0]));
-                body.add(_cone(0.08, 0.5, '#a8d8f8', [0.15, 3.5, 0]));
-                body.add(_sphere(0.06, '#d0f0ff', [0, 3.95, 0]));
-                body.add(_sphere(0.05, '#d0f0ff', [-0.15, 3.75, 0]));
-                body.add(_sphere(0.05, '#d0f0ff', [0.15, 3.75, 0]));
-                body.add(_sphere(0.08, '#6090c0', [-0.14, 2.85, 0.35]));
-                body.add(_sphere(0.08, '#6090c0', [0.14, 2.85, 0.35]));
-                body.add(_sphere(0.04, '#1a3050', [-0.14, 2.85, 0.4]));
-                body.add(_sphere(0.04, '#1a3050', [0.14, 2.85, 0.4]));
-                body.add(_sphere(0.06, '#c080a0', [0, 2.68, 0.38]));
-                body.add(_cyl(0.05, 0.05, 3.0, '#a0c8e0', [0.7, 2.0, 0]));
-                body.add(_cone(0.15, 0.5, '#d0f0ff', [0.7, 3.6, 0]));
-                body.add(_sphere(0.08, '#e0f8ff', [0.7, 3.85, 0]));
-                break;
-              }
-            }
-
-            g.add(body);
-            return g;
-          };
-
-
-
-          p1Mesh = buildCharacterStandee(p1CharRef.current);
-          p2Mesh = buildCharacterStandee(p2CharRef.current);
-
-          p1Mesh.position.copy(tileCoords[0]); p1Mesh.position.x -= 1.2;
-          p2Mesh.position.copy(tileCoords[0]); p2Mesh.position.x += 1.2;
-          scene.add(p1Mesh); scene.add(p2Mesh);
-
-          // --- EVENTOS DE RATO (CONTROLO DE CÂMARA LIVRE) ---
-          const onPointerDown = (e) => {
-            isDragging = true;
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-            if (cameraViewRef.current !== 'free') setCameraView('free');
-          };
-          const onPointerMove = (e) => {
-            if (isDragging) {
-              const deltaX = e.clientX - previousMousePosition.x;
-              const deltaY = e.clientY - previousMousePosition.y;
-              targetSpherical.theta -= deltaX * 0.01;
-              targetSpherical.phi -= deltaY * 0.01;
-              targetSpherical.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, targetSpherical.phi));
-              previousMousePosition = { x: e.clientX, y: e.clientY };
-            }
-          };
-          const onPointerUp = () => { isDragging = false; };
-          const onWheel = (e) => {
-            e.preventDefault();
-            targetSpherical.radius += e.deltaY * 0.02;
-            targetSpherical.radius = Math.max(5, Math.min(80, targetSpherical.radius));
-            if (cameraViewRef.current !== 'free') setCameraView('free');
-          };
-
-          const canvasEl = renderer.domElement;
-          canvasEl.addEventListener('pointerdown', onPointerDown);
-          window.addEventListener('pointermove', onPointerMove);
-          window.addEventListener('pointerup', onPointerUp);
-          canvasEl.addEventListener('wheel', onWheel, { passive: false });
-
-          isThreeReady.current = true;
-
-          // Loop de Animação
-          const renderLoop = () => {
-            animationId = requestAnimationFrame(renderLoop);
-
-            const updatePlayerVisual = (mesh, targetIndex, offset, playerNum) => {
-              const idx = Math.min(targetIndex, TRACK_LENGTH);
-              const targetPos = tileCoords[idx].clone();
-              targetPos.x += offset;
-
-              mesh.position.lerp(targetPos, 0.04);
-
-              const reaction = reactionRef.current;
-              let isReacting = false;
-
-              if (reaction.player === playerNum) {
-                const elapsed = Date.now() - reaction.time;
-                if (elapsed < 1500) {
-                  isReacting = true;
-                  const progress = elapsed / 1500;
-                  if (reaction.type === 'success') {
-                    mesh.position.y = Math.abs(Math.sin(progress * Math.PI)) * 5;
-                    mesh.rotation.y += 0.2;
-                  } else if (reaction.type === 'fail') {
-                    const squash = 1 - Math.sin(progress * Math.PI) * 0.5;
-                    mesh.scale.set(1 / squash, Math.max(0.2, squash), 1 / squash);
-                    mesh.rotation.z = Math.sin(progress * Math.PI * 10) * 0.3;
-                  }
-                }
-              }
-
-              if (!isReacting) {
-                mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
-                mesh.rotation.z *= 0.8;
-
-                if (mesh.position.distanceTo(targetPos) > 0.5) {
-                  mesh.position.y = Math.abs(Math.sin(Date.now() * 0.008)) * 2;
-                  mesh.rotation.y = Math.atan2(targetPos.x - mesh.position.x, targetPos.z - mesh.position.z);
-                } else {
-                  mesh.position.y = 0;
-                  if (idx < TRACK_LENGTH) {
-                    const nextTile = tileCoords[idx + 1];
-                    mesh.rotation.y = Math.atan2(nextTile.x - mesh.position.x, nextTile.z - mesh.position.z);
-                  }
-                }
-              }
-            };
-
-            updatePlayerVisual(p1Mesh, targetPositions.current[0], -1.2, 1);
-            updatePlayerVisual(p2Mesh, targetPositions.current[1], 1.2, 2);
-
-            // --- ATUALIZAÇÃO DA CÂMARA ---
-            const activeIdx = cameraTargetPlayer.current === 1 ? targetPositions.current[0] : targetPositions.current[1];
-            const activePos = tileCoords[Math.min(activeIdx, TRACK_LENGTH)];
-            const nextIdx = Math.min(activeIdx + 1, TRACK_LENGTH);
-            const dir = new THREE.Vector3().subVectors(tileCoords[nextIdx], activePos).normalize();
-            if (dir.lengthSq() < 0.1) dir.set(0, 0, 1);
-
-            // Afastar câmara durante animação de movimento
-            const isMoving = isAnimating.current[0] || isAnimating.current[1];
-            if (isMoving && cameraViewRef.current !== 'free' && cameraViewRef.current !== 'topDown' && cameraViewRef.current !== 'firstPerson') {
-              targetSpherical.radius = Math.max(targetSpherical.radius, 35);
-              targetSpherical.phi = Math.min(targetSpherical.phi, Math.PI / 3.5);
-            }
-
-            if (prevCameraView !== cameraViewRef.current) {
-              prevCameraView = cameraViewRef.current;
-              switch (cameraViewRef.current) {
-                case 'thirdPerson':
-                  targetSpherical.radius = 18; targetSpherical.phi = Math.PI / 3;
-                  targetSpherical.theta = Math.atan2(-dir.x, -dir.z);
-                  break;
-                case 'secondPerson':
-                  targetSpherical.radius = 14; targetSpherical.phi = Math.PI / 2.5;
-                  targetSpherical.theta = Math.atan2(dir.x, dir.z);
-                  break;
-                case 'topDown':
-                  targetSpherical.radius = 60; targetSpherical.phi = 0.05;
-                  break;
-              }
-            }
-
-            let idealCamPos = new THREE.Vector3();
-            let idealLookTarget = new THREE.Vector3();
-
-            if (cameraViewRef.current === 'firstPerson') {
-              idealCamPos.copy(activePos).add(new THREE.Vector3(0, 6, 0));
-              idealLookTarget.copy(activePos).add(new THREE.Vector3(0, 6, 0)).add(dir.clone().multiplyScalar(20));
-              camera.position.lerp(idealCamPos, 0.1);
-            } else {
-              currentSpherical.radius += (targetSpherical.radius - currentSpherical.radius) * 0.1;
-              currentSpherical.phi += (targetSpherical.phi - currentSpherical.phi) * 0.1;
-
-              let diff = targetSpherical.theta - currentSpherical.theta;
-              while (diff < -Math.PI) diff += Math.PI * 2;
-              while (diff > Math.PI) diff -= Math.PI * 2;
-              currentSpherical.theta += diff * 0.1;
-
-              const offset = new THREE.Vector3().setFromSpherical(currentSpherical);
-              idealCamPos.copy(activePos).add(offset);
-              idealLookTarget.copy(activePos).add(new THREE.Vector3(0, 2, 0));
-
-              camera.position.copy(idealCamPos);
-            }
-
-            currentLookTarget.lerp(idealLookTarget, 0.1);
-            camera.lookAt(currentLookTarget);
-
-            renderer.render(scene, camera);
-          };
-
-          renderLoop();
-
-          const handleResize = () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-          };
-          window.addEventListener('resize', handleResize);
-
-          return () => {
-            window.removeEventListener('resize', handleResize);
-            canvasEl.removeEventListener('pointerdown', onPointerDown);
-            window.removeEventListener('pointermove', onPointerMove);
-            window.removeEventListener('pointerup', onPointerUp);
-            canvasEl.removeEventListener('wheel', onWheel);
-            cancelAnimationFrame(animationId);
-            renderer.dispose();
-          };
-        };
-
-        // Inicializar
-        initThree();
-
-        return () => {
-          isMounted = false;
-          if (renderer) { renderer.dispose(); renderer.forceContextLoss(); }
-          if (mountRef.current) mountRef.current.innerHTML = '';
-        };
-      }, [gameState === 'select_p1', gameState === 'select_p2', gameState === 'select_world']);
-
-      // Sincronizar React State com Refs
-      useEffect(() => {
-        if (!isAnimating.current[0]) targetPositions.current[0] = player1Pos;
-        if (!isAnimating.current[1]) targetPositions.current[1] = player2Pos;
-      }, [player1Pos, player2Pos]);
-      useEffect(() => { cameraTargetPlayer.current = currentPlayer; }, [currentPlayer]);
-      useEffect(() => { cameraViewRef.current = cameraView; }, [cameraView]);
-      useEffect(() => { p1CharRef.current = p1Char; p2CharRef.current = p2Char; }, [p1Char, p2Char]);
-
-      const selectCharacter = (id) => {
-        if (gameState === 'select_p1') {
-          p1CharRef.current = id;
-          setP1Char(id);
-          setGameState('select_p2');
-        } else if (gameState === 'select_p2') {
-          p2CharRef.current = id;
-          setP2Char(id);
-          setGameState('select_world');
-        }
-      };
-
-      const selectWorld = (id) => {
-        setSelectedWorld(id);
-        setGameState('start');
-      };
-
-      const goBackToSelect = () => {
-        setP1Char(null);
-        setP2Char(null);
-        setGameState('select_p1');
-      };
-
-      const startGame = () => {
-        setPlayer1Pos(0); setPlayer2Pos(0); setCurrentPlayer(1);
-        setWinner(null); setFeedback(null); setSpecialEvent(null);
-        setP1Score(0); setP2Score(0);
-        setP1Correct(0); setP1Wrong(0); setP2Correct(0); setP2Wrong(0);
-        targetPositions.current = [0, 0];
-        isAnimating.current = [false, false];
-        setGameState('question');
-        setIsQuestionMinimized(false);
-        setIsPaused(false);
-        pickRandomQuestion();
-      };
-
-      const pickRandomQuestion = () => {
-        setCurrentQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
-        setTimeLeft(20);
-      };
-
-      // Timer de 20 segundos para responder
-      useEffect(() => {
-        if (gameState !== 'question' || feedback || isPaused) return;
-        if (timeLeft <= 0) {
-          // Tempo esgotado!
-          reactionRef.current = { player: currentPlayer, type: 'fail', time: Date.now() };
-          setFeedback({ isCorrect: false, msg: '⏰ Tempo esgotado! Recua 3 casas.' });
-
-          setTimeout(() => {
-            const currentPos = currentPlayer === 1 ? player1Pos : player2Pos;
-            const penaltyPos = Math.max(currentPos - 3, 0);
-            movePlayerStepByStep(currentPlayer, currentPos, penaltyPos, () => {
-              nextTurn();
-            });
-          }, 2000);
-          return;
-        }
-        const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-        return () => clearTimeout(timerId);
-      }, [gameState, timeLeft, feedback, isPaused]);
-
-      const handleAnswer = (selectedAnswer) => {
-        if (gameState !== 'question' || feedback || isPaused) return;
-        const isCorrect = selectedAnswer === currentQuestion.answer;
-
-        reactionRef.current = { player: currentPlayer, type: isCorrect ? 'success' : 'fail', time: Date.now() };
-
-        if (isCorrect) {
-          if (currentPlayer === 1) { setP1Score(s => s + 10); setP1Correct(c => c + 1); }
-          else { setP2Score(s => s + 10); setP2Correct(c => c + 1); }
-          setFeedback({ isCorrect: true, msg: "Fantástico! Gira o dado!" });
-          setTimeout(() => { setFeedback(null); setGameState('dice'); }, 1500);
-        } else {
-          if (currentPlayer === 1) setP1Wrong(w => w + 1); else setP2Wrong(w => w + 1);
-          setFeedback({ isCorrect: false, msg: `Ops! A resposta era ${formatAnswerName(currentQuestion.answer)}.` });
-          setTimeout(() => nextTurn(), 2500);
-        }
-      };
-
-      const rollDice = () => {
-        if (isRolling || isPaused) return;
-        setIsRolling(true);
-        let rolls = 0;
-        const rollInterval = setInterval(() => {
-          setDiceValue(Math.floor(Math.random() * 6) + 1);
-          rolls++;
-          if (rolls >= 15) {
-            clearInterval(rollInterval);
-            setIsRolling(false);
-            const finalValue = Math.floor(Math.random() * 6) + 1;
-            setDiceValue(finalValue);
-            handleDiceResult(finalValue);
-          }
-        }, 80);
-      };
-
-      const handleDiceResult = (rolledValue) => {
-        setFeedback({ isCorrect: true, msg: `Tiraste ${rolledValue}! A avançar...` });
-        setTimeout(() => {
-          const currentPos = currentPlayer === 1 ? player1Pos : player2Pos;
-          const nextPos = Math.min(currentPos + rolledValue, TRACK_LENGTH);
-
-          movePlayerStepByStep(currentPlayer, currentPos, nextPos, () => {
-            if (nextPos >= TRACK_LENGTH) {
-              setTimeout(() => finishGame(currentPlayer), 1000);
-              return;
-            }
-            if (SPECIAL_TILES[nextPos]) triggerSpecialEvent(nextPos);
-            else nextTurn();
-          });
-        }, 2000);
-      };
-
-      const triggerSpecialEvent = (landedPos) => {
-        const event = SPECIAL_TILES[landedPos];
-        setSpecialEvent(event);
-        setGameState('event');
-        setFeedback(null);
-
-        setTimeout(() => {
-          let finalPos;
-          if (event.type === 'reset') finalPos = 0;
-          else finalPos = Math.min(Math.max(landedPos + event.value, 0), TRACK_LENGTH);
-
-          movePlayerStepByStep(currentPlayer, landedPos, finalPos, () => {
-            if (finalPos >= TRACK_LENGTH) finishGame(currentPlayer);
-            else nextTurn();
-          });
-        }, 2500);
-      };
-
-      const updatePlayerPosition = (player, newPos) => {
-        if (player === 1) setPlayer1Pos(newPos); else setPlayer2Pos(newPos);
-      };
-
-      const movePlayerStepByStep = (player, fromPos, toPos, callback) => {
-        const playerIdx = player - 1;
-        const steps = [];
-        if (toPos > fromPos) {
-          for (let i = fromPos + 1; i <= toPos; i++) steps.push(i);
-        } else {
-          for (let i = fromPos - 1; i >= toPos; i--) steps.push(i);
-        }
-        if (steps.length === 0) { if (callback) callback(); return; }
-
-        isAnimating.current[playerIdx] = true;
-        const STEP_DELAY = 700;
-
-        steps.forEach((step, index) => {
-          setTimeout(() => {
-            targetPositions.current[playerIdx] = step;
-            if (index === steps.length - 1) {
-              isAnimating.current[playerIdx] = false;
-              updatePlayerPosition(player, toPos);
-              if (callback) setTimeout(callback, 600);
-            }
-          }, index * STEP_DELAY);
-        });
-      };
-
-      const nextTurn = () => {
-        setFeedback(null); setSpecialEvent(null);
-        setIsQuestionMinimized(false);
-        setCurrentPlayer(currentPlayer === 1 ? 2 : 1);
-        setGameState('question');
-        pickRandomQuestion();
-      };
-
-      const finishGame = (winningPlayer) => {
-        setWinner(winningPlayer); setGameState('end'); setIsPaused(false);
-      };
-
-      const endGameManually = () => {
-        let w = null;
-        if (player1Pos > player2Pos) w = 1;
-        else if (player2Pos > player1Pos) w = 2;
-        else if (p1Score > p2Score) w = 1;
-        else if (p2Score > p1Score) w = 2;
-        else w = currentPlayer;
-        setWinner(w); setGameState('end'); setIsPaused(false);
-      };
-
-      const formatAnswerName = (key) => {
-        const map = { contagem: "Contagem", ordenacao: "Ordenação", medida: "Medida", codigo: "Código" };
-        return map[key] || key;
-      };
-
-      // Componente de Confetti
-      const ConfettiEffect = () => {
-        const colors = ['#fbbf24', '#ef4444', '#3b82f6', '#22c55e', '#a855f7', '#ec4899', '#f97316', '#06b6d4'];
-        const pieces = [];
-        for (let i = 0; i < 60; i++) {
-          const style = {
-            left: `${Math.random() * 100}%`,
-            backgroundColor: colors[Math.floor(Math.random() * colors.length)],
-            animationDuration: `${2 + Math.random() * 3}s`,
-            animationDelay: `${Math.random() * 2}s`,
-            width: `${8 + Math.random() * 12}px`,
-            height: `${8 + Math.random() * 12}px`,
-            borderRadius: Math.random() > 0.5 ? '50%' : '2px',
-          };
-          pieces.push(<div key={i} className="confetti-piece" style={style} />);
-        }
-        return <div className="confetti-container">{pieces}</div>;
-      };
-
-      const DadoUI = ({ face, isRolling }) => {
-        const dots = [];
-        for (let i = 0; i < face; i++) dots.push(<div key={i} className="w-3 h-3 bg-white rounded-full m-1 shadow-inner" />);
-        return (
-          <div className={`w-20 h-20 bg-red-600 rounded-2xl flex flex-wrap items-center justify-center p-2 border-b-4 border-r-4 border-red-800 shadow-xl mx-auto my-4 transition-transform ${isRolling ? 'animate-spin' : 'scale-110'}`}>
-            {dots}
-          </div>
-        );
-      };
-
-      if (gameState === 'select_p1' || gameState === 'select_p2' || gameState === 'select_world') {
-        if (gameState === 'select_world') {
-          return (
-            <div className="min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-slate-900 flex flex-col items-center justify-center p-4 font-sans">
-              <div className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl p-8 max-w-4xl w-full text-center border-2 border-white/20">
-                <h1 className="text-4xl md:text-5xl font-black text-white mb-2 uppercase">Escolhe o Mundo</h1>
-                <p className="text-lg text-white/70 mb-8">Onde será a aventura?</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-                  {Object.values(WORLDS).map((world) => (
-                    <button key={world.id} onClick={() => selectWorld(world.id)}
-                      className="flex flex-col items-center justify-center p-5 rounded-2xl border-b-6 transition-all shadow-lg bg-white/10 border-white/20 hover:bg-white/20 hover:-translate-y-2 hover:shadow-2xl active:translate-y-0 active:border-b-0 backdrop-blur-sm">
-                      <span className="text-5xl mb-3 filter drop-shadow-md">{world.icon}</span>
-                      <span className="font-black text-white text-sm">{world.name}</span>
-                      <span className="text-white/60 text-xs mt-1">{world.desc}</span>
-                    </button>
-                  ))}
-                </div>
-                <button onClick={() => setGameState('select_p2')} className="text-white/50 hover:text-white text-sm font-bold mt-2">← Voltar</button>
-              </div>
-            </div>
-          );
-        }
-        const isP1 = gameState === 'select_p1';
-        return (
-          <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center p-4 font-sans">
-            <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-4xl w-full text-center border-8 border-green-600 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-32 bg-green-500 opacity-20 transform -skew-y-3 origin-top-left"></div>
-              <h1 className="text-4xl md:text-5xl font-black text-slate-800 mb-2 uppercase relative z-10">Aventura Nárnia 3D</h1>
-              <h2 className={`text-xl md:text-2xl font-bold mb-8 px-8 py-3 inline-block rounded-full shadow-lg text-white transition-colors duration-500 relative z-10 ${isP1 ? 'bg-blue-500' : 'bg-red-500'}`}>
-                Jogador {isP1 ? '1' : '2'}, escolhe o teu Personagem!
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 relative z-10">
-                {Object.values(CHARACTERS).map((char) => {
-                  const isSelected = (!isP1 && p1Char === char.id);
-                  return (
-                    <button key={char.id} disabled={isSelected} onClick={() => selectCharacter(char.id)}
-                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-b-8 transition-all shadow-md ${isSelected ? 'opacity-40 grayscale cursor-not-allowed bg-gray-100 border-gray-300' : 'bg-white border-amber-400 hover:bg-amber-50 hover:-translate-y-2 hover:shadow-xl active:translate-y-0 active:border-b-0'}`}
-                    >
-                      <span className="text-6xl mb-3 filter drop-shadow-md">{char.icon}</span>
-                      <span className="font-extrabold text-slate-700 text-sm md:text-base">{char.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      const isPlaying = ['question', 'dice', 'event'].includes(gameState);
-
-      return (
-        <div className="relative w-full h-screen overflow-hidden font-sans bg-slate-900 select-none">
-          <div ref={mountRef} className="absolute inset-0 z-0 pointer-events-auto" />
-          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col">
-
-            {isPaused && (
-              <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
-                <div className="bg-white p-10 rounded-3xl shadow-2xl text-center border-8 border-amber-500 max-w-sm w-full animate-in zoom-in">
-                  <h2 className="text-4xl font-black text-slate-800 mb-6 uppercase">Jogo Pausado</h2>
-                  <button onClick={() => setIsPaused(false)} className="bg-amber-500 hover:bg-amber-400 text-white px-8 py-4 rounded-full font-black text-xl flex items-center justify-center gap-3 w-full border-b-8 border-amber-700 active:border-b-0 active:translate-y-2 transition-all">
-                    <Play fill="currentColor" size={24} /> RETOMAR
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {gameState !== 'end' && (
-              <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 flex gap-2 md:gap-4 pointer-events-auto bg-white/90 backdrop-blur-md px-4 md:px-6 py-3 rounded-full shadow-2xl border-2 border-slate-200">
-                {gameState === 'start' ? (
-                  <button onClick={startGame} className="flex items-center gap-2 text-green-700 hover:text-green-500 font-bold transition-colors px-2">
-                    <Play size={20} fill="currentColor" /> <span className="hidden md:inline">Iniciar</span>
-                  </button>
-                ) : (
-                  <button onClick={() => setIsPaused(!isPaused)} className="flex items-center gap-2 text-amber-700 hover:text-amber-500 font-bold transition-colors px-2">
-                    {isPaused ? <><Play size={20} fill="currentColor" /> <span className="hidden md:inline">Retomar</span></> : <><Pause size={20} fill="currentColor" /> <span className="hidden md:inline">Pausar</span></>}
-                  </button>
-                )}
-                <div className="w-px bg-slate-300 mx-1"></div>
-                <button onClick={() => { startGame(); }} className="flex items-center gap-2 text-blue-700 hover:text-blue-500 font-bold transition-colors px-2">
-                  <RotateCcw size={20} /> <span className="hidden md:inline">Reiniciar</span>
-                </button>
-                <div className="w-px bg-slate-300 mx-1"></div>
-                <button onClick={endGameManually} className="flex items-center gap-2 text-red-700 hover:text-red-500 font-bold transition-colors px-2">
-                  <Square size={20} fill="currentColor" /> <span className="hidden md:inline">Terminar</span>
-                </button>
-              </div>
-            )}
-
-            {isPlaying && (
-              <>
-                <div className="absolute top-4 left-4 z-20 flex flex-col gap-2 pointer-events-auto">
-                  <button onClick={() => setCameraView('free')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'free' ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
-                    <MousePointer2 size={16} /> Câmara Livre
-                  </button>
-                  <button onClick={() => setCameraView('thirdPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'thirdPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
-                    <User size={16} /> 3ª Pessoa (Atrás)
-                  </button>
-                  <button onClick={() => setCameraView('firstPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'firstPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
-                    <Eye size={16} /> 1ª Pessoa
-                  </button>
-                  <button onClick={() => setCameraView('secondPerson')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'secondPerson' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
-                    <Camera size={16} /> 2ª Pessoa (Frente)
-                  </button>
-                  <button onClick={() => setCameraView('topDown')} className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold shadow-lg flex items-center gap-2 transition-all border ${cameraView === 'topDown' ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-white'}`}>
-                    <MapIcon size={16} /> Visão Aérea
-                  </button>
-                </div>
-
-                <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-3 pointer-events-auto">
-                  <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border-2 border-white/50 text-right">
-                    <div className="flex flex-col gap-2 text-sm font-bold">
-                      <span className={`px-3 py-1 rounded-md transition-colors ${currentPlayer === 1 ? 'bg-blue-500 text-white shadow-md scale-105' : 'text-slate-500 bg-slate-100'}`}>
-                        {CHARACTERS[p1Char].icon} P1: Casa {player1Pos}
-                      </span>
-                      <span className={`px-3 py-1 rounded-md transition-colors ${currentPlayer === 2 ? 'bg-red-500 text-white shadow-md scale-105' : 'text-slate-500 bg-slate-100'}`}>
-                        {CHARACTERS[p2Char].icon} P2: Casa {player2Pos}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`px-6 py-2 rounded-full shadow-lg border-2 transition-colors duration-300 ${currentPlayer === 1 ? 'bg-blue-600 border-blue-400 text-white' : 'bg-red-600 border-red-400 text-white'}`}>
-                    <span className="font-black uppercase tracking-widest text-xs md:text-sm">Vez do Jogador {currentPlayer}</span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {gameState === 'question' && (
-              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-80 md:w-96 flex flex-col items-end pointer-events-auto z-30">
-                {!isQuestionMinimized ? (
-                  <div className="w-full bg-amber-100/95 backdrop-blur-md p-6 rounded-3xl shadow-2xl border-4 border-amber-600 animate-in slide-in-from-right relative">
-                    <button onClick={() => setIsQuestionMinimized(true)} className="absolute top-4 right-4 bg-amber-200 hover:bg-amber-300 p-2 rounded-full text-amber-800 transition-colors">
-                      <EyeOff size={20} />
-                    </button>
-
-                    {/* Timer circular */}
-                    <div className="flex justify-center mb-4">
-                      <div className="relative w-16 h-16">
-                        <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                          <circle cx="32" cy="32" r="28" fill="none" stroke="#e5e7eb" strokeWidth="5" />
-                          <circle cx="32" cy="32" r="28" fill="none"
-                            stroke={timeLeft <= 5 ? '#ef4444' : '#f59e0b'}
-                            strokeWidth="5" strokeLinecap="round"
-                            strokeDasharray={`${(timeLeft / 20) * 175.93} 175.93`}
-                            style={{ transition: 'stroke-dasharray 1s linear, stroke 0.3s' }}
-                          />
-                        </svg>
-                        <span className={`absolute inset-0 flex items-center justify-center font-black text-lg ${timeLeft <= 5 ? 'text-red-600 animate-pulse' : 'text-amber-800'}`}>
-                          {timeLeft}
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="text-amber-900 font-bold text-center mb-4 uppercase tracking-widest text-xs opacity-80 border-b-2 border-amber-200 pb-2">
-                      Classifica o número:
-                    </h3>
-                    <p className="text-xl md:text-2xl font-black text-slate-800 text-center mb-6 bg-white p-4 rounded-2xl shadow-inner">
-                      "{currentQuestion?.text}"
-                    </p>
-                    {!feedback ? (
-                      <div className="flex flex-col gap-3">
-                        {['contagem', 'ordenacao', 'medida', 'codigo'].map((opcao) => (
-                          <button key={opcao} onClick={() => handleAnswer(opcao)} className="bg-white border-b-4 border-amber-300 hover:border-amber-400 text-amber-900 font-black py-3 rounded-xl shadow-md active:translate-y-1 transition-all text-sm uppercase">
-                            {formatAnswerName(opcao)}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className={`p-4 rounded-2xl border-4 text-center ${feedback.isCorrect ? 'bg-green-100 border-green-500 text-green-800' : 'bg-red-100 border-red-500 text-red-800'}`}>
-                        {feedback.isCorrect ? <CheckCircle size={32} className="mx-auto mb-2 text-green-600" /> : <XCircle size={32} className="mx-auto mb-2 text-red-600" />}
-                        <p className="text-lg font-black">{feedback.msg}</p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button onClick={() => setIsQuestionMinimized(false)} className="bg-amber-500 hover:bg-amber-400 text-white p-4 rounded-2xl shadow-2xl border-b-4 border-amber-700 font-black flex flex-col items-center gap-2 animate-bounce">
-                    <Eye size={28} /> VER PERGUNTA
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="flex-grow flex items-center justify-center p-4">
-              {gameState === 'start' && (
-                <div className="bg-white/95 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl border-4 border-green-500 max-w-xl text-center pointer-events-auto">
-                  <div className="flex justify-center items-center gap-6 text-6xl mb-6 font-black">
-                    <span className="filter drop-shadow-md">{CHARACTERS[p1Char].icon}</span>
-                    <span className="text-3xl text-slate-400">VS</span>
-                    <span className="filter drop-shadow-md">{CHARACTERS[p2Char].icon}</span>
-                  </div>
-                  <h2 className="text-3xl font-black text-slate-800 mb-4 uppercase">
-                    {CHARACTERS[p1Char].name} <br />vs<br /> {CHARACTERS[p2Char].name}
-                  </h2>
-                  <p className="text-slate-600 text-lg font-medium mb-8 bg-slate-100 p-4 rounded-xl shadow-inner">
-                    🖱️ <b>Dica:</b> Clica e arrasta no cenário para rodar a câmara. Usa a roda do rato para dar Zoom! A pergunta ficará na lateral.
-                  </p>
-                  <button onClick={startGame} className="bg-green-500 border-b-8 border-green-700 hover:-translate-y-1 active:border-b-0 active:translate-y-2 text-white font-black text-2xl py-4 px-12 rounded-full shadow-xl flex items-center gap-3 mx-auto transition-all">
-                    <Play fill="currentColor" size={28} /> COMEÇAR
-                  </button>
-                </div>
-              )}
-
-              {gameState === 'dice' && (
-                <div className="fixed right-4 top-1/2 -translate-y-1/2 bg-slate-800/95 backdrop-blur-xl p-6 rounded-[2rem] shadow-2xl border-4 border-slate-600 w-64 text-center pointer-events-auto z-40">
-                  <h3 className="text-white text-lg font-black uppercase mb-4 drop-shadow-md">Lança o Dado!</h3>
-                  <DadoUI face={diceValue} isRolling={isRolling} />
-                  <div className="h-14 mt-4 flex items-center justify-center">
-                    {!isRolling && !feedback ? (
-                      <button onClick={rollDice} className="bg-red-500 border-b-6 border-red-700 hover:bg-red-400 text-white font-black text-lg py-2 px-6 rounded-full w-full active:border-b-0 active:translate-y-1 transition-all">ROLAR DADO</button>
-                    ) : (
-                      <p className="text-green-400 text-lg font-black animate-pulse">{feedback?.msg || "A rodar..."}</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {gameState === 'event' && specialEvent && (
-                <div className="bg-yellow-300/95 backdrop-blur-md p-8 rounded-[2rem] shadow-2xl border-8 border-yellow-500 max-w-lg text-center pointer-events-auto animate-[bounce_1s_ease-in-out_infinite]">
-                  <AlertTriangle size={80} className={`mx-auto mb-4 ${specialEvent.type === 'reset' ? 'text-red-600' : 'text-orange-600'}`} />
-                  <h2 className="text-4xl font-black text-slate-800 uppercase mb-4">CASA ESPECIAL!</h2>
-                  <p className="text-2xl font-bold bg-white p-4 rounded-xl shadow-inner">{specialEvent.text}</p>
-                </div>
-              )}
-
-              {gameState === 'end' && (
-                <>
-                  <ConfettiEffect />
-                  <div className="bg-gradient-to-b from-yellow-400 to-amber-500 backdrop-blur-xl p-8 rounded-[2rem] shadow-2xl border-8 border-yellow-600 max-w-2xl w-full text-center pointer-events-auto z-50" style={{ animation: 'zoomIn 0.5s ease-out' }}>
-                    <div className="text-8xl mb-4 drop-shadow-lg" style={{ animation: 'trophyBounce 1.5s ease-in-out infinite' }}>🏆</div>
-                    <h2 className="text-4xl md:text-5xl font-black text-yellow-900 uppercase mb-2">Vitória!</h2>
-                    <div className="text-6xl mb-2">{winner === 1 ? CHARACTERS[p1Char]?.icon : CHARACTERS[p2Char]?.icon}</div>
-                    <p className={`text-2xl md:text-3xl font-black mb-6 px-6 py-3 rounded-2xl bg-white shadow-inner ${winner === 1 ? 'text-blue-600' : 'text-red-600'}`}>
-                      👑 {winner === 1 ? CHARACTERS[p1Char]?.name?.toUpperCase() : CHARACTERS[p2Char]?.name?.toUpperCase()} VENCEU!
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className={`bg-white rounded-2xl p-4 shadow-lg border-4 ${winner === 1 ? 'border-yellow-500 ring-4 ring-yellow-300' : 'border-slate-200'}`}>
-                        {winner === 1 && <div className="text-2xl mb-1">👑</div>}
-                        <div className="text-3xl mb-1">{CHARACTERS[p1Char]?.icon}</div>
-                        <h3 className="font-black text-slate-800 text-sm mb-2">{CHARACTERS[p1Char]?.name}</h3>
-                        <div className="bg-blue-50 rounded-xl p-3 space-y-1 text-left">
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">⭐ Pontos:</span><span className="font-black text-blue-700">{p1Score}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">📍 Posição:</span><span className="font-black text-blue-700">{player1Pos}/{TRACK_LENGTH}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">✅ Acertos:</span><span className="font-black text-green-600">{p1Correct}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">❌ Erros:</span><span className="font-black text-red-600">{p1Wrong}</span></div>
-                        </div>
-                      </div>
-                      <div className={`bg-white rounded-2xl p-4 shadow-lg border-4 ${winner === 2 ? 'border-yellow-500 ring-4 ring-yellow-300' : 'border-slate-200'}`}>
-                        {winner === 2 && <div className="text-2xl mb-1">👑</div>}
-                        <div className="text-3xl mb-1">{CHARACTERS[p2Char]?.icon}</div>
-                        <h3 className="font-black text-slate-800 text-sm mb-2">{CHARACTERS[p2Char]?.name}</h3>
-                        <div className="bg-red-50 rounded-xl p-3 space-y-1 text-left">
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">⭐ Pontos:</span><span className="font-black text-red-700">{p2Score}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">📍 Posição:</span><span className="font-black text-red-700">{player2Pos}/{TRACK_LENGTH}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">✅ Acertos:</span><span className="font-black text-green-600">{p2Correct}</span></div>
-                          <div className="flex justify-between text-sm"><span className="text-slate-600">❌ Erros:</span><span className="font-black text-red-600">{p2Wrong}</span></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button onClick={() => { startGame(); }} className="flex-1 bg-green-500 hover:bg-green-400 border-b-6 border-green-700 text-white font-black text-lg py-3 px-6 rounded-full flex justify-center gap-2 transition-all hover:-translate-y-1 active:translate-y-1 active:border-b-0">
-                        <RefreshCw size={22} /> JOGAR DE NOVO
-                      </button>
-                      <button onClick={goBackToSelect} className="flex-1 bg-slate-700 hover:bg-slate-600 border-b-6 border-slate-900 text-white font-black text-lg py-3 px-6 rounded-full flex justify-center gap-2 transition-all hover:-translate-y-1 active:translate-y-1 active:border-b-0">
-                        MUDAR PERSONAGENS
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+    <!-- ============ TELA TÍTULO ============ -->
+    <div id="screen-title" class="screen active">
+        <div class="title-bg">
+            <h1 class="title-logo">MATH<br>KOMBAT</h1>
+            <p class="title-sub">Números Naturais</p>
+            <button id="btn-start" class="btn-arcade btn-green">INICIAR</button>
+            <button id="btn-settings" class="btn-arcade btn-blue" style="margin-top: 20px; font-size: 0.8rem; padding: 12px 20px;">⚙️ CONFIG</button>
         </div>
-      );
-    }
+    </div>
 
-    const rootElement = document.getElementById('root');
-    const root = ReactDOM.createRoot(rootElement);
-    root.render(<App />);
-  </script>
+    <!-- ============ TELA CONFIGURAÇÕES ============ -->
+    <div id="screen-settings" class="screen">
+        <h2 class="select-title">⚙️ CONFIGURAÇÕES</h2>
+        <div style="background:#1e293b; border:4px solid #3b82f6; border-radius:12px; padding:30px; width:90%; max-width:500px; text-align:center; margin: 40px auto; color:white; font-family:'Press Start 2P', monospace;">
+            <div style="margin-bottom:30px;">
+                <label for="input-answer-time" style="display:block; margin-bottom:20px; font-size:0.8rem; line-height:1.6; color:#fbbf24;">Tempo Máximo p/ Resposta:<br><br><span id="val-answer-time" style="font-size:1.5rem; color:#fff;">60</span> s</label>
+                <input type="range" id="input-answer-time" min="5" max="180" step="5" value="60" style="width:100%; accent-color:#fbbf24;">
+            </div>
+            <button class="btn-arcade btn-green" id="btn-save-settings">SALVAR</button>
+        </div>
+    </div>
+
+    <!-- ============ TELA SELEÇÃO DE FASE ============ -->
+    <div id="screen-phases" class="screen">
+        <h2 class="select-title">ESCOLHA A FASE</h2>
+        <div class="phase-grid">
+            <button class="phase-card" data-phase="floresta">
+                <span class="phase-icon">🌳</span>
+                <span class="phase-name">Floresta Encantada</span>
+                <span class="phase-topic">Antecessor e Sucessor</span>
+            </button>
+            <button class="phase-card" data-phase="castelo">
+                <span class="phase-icon">🏰</span>
+                <span class="phase-name">Castelo de Pedra</span>
+                <span class="phase-topic">Números Consecutivos</span>
+            </button>
+            <button class="phase-card" data-phase="montanha">
+                <span class="phase-icon">⛰️</span>
+                <span class="phase-name">Montanha Gelada</span>
+                <span class="phase-topic">Comparação (&lt;, &gt;, =)</span>
+            </button>
+            <button class="phase-card" data-phase="deserto">
+                <span class="phase-icon">🏜️</span>
+                <span class="phase-name">Deserto Ardente</span>
+                <span class="phase-topic">Números Romanos</span>
+            </button>
+            <button class="phase-card" data-phase="vulcao">
+                <span class="phase-icon">🌋</span>
+                <span class="phase-name">Vulcão Infernal</span>
+                <span class="phase-topic">Sistema Posicional</span>
+            </button>
+            <button class="phase-card" data-phase="cidade">
+                <span class="phase-icon">🏙️</span>
+                <span class="phase-name">Cidade Futurista</span>
+                <span class="phase-topic">Agrupamento e Decomposição</span>
+            </button>
+            <button class="phase-card phase-card--exclusive" data-phase="templo">
+                <span class="phase-icon">🔱</span>
+                <span class="phase-badge">EXCLUSIVA</span>
+                <span class="phase-name">Templo do Sábio</span>
+                <span class="phase-topic">Tabuada da Multiplicação</span>
+            </button>
+        </div>
+        <button class="btn-arcade btn-small btn-back-mode" id="btn-back-phases">⬅ VOLTAR</button>
+    </div>
+
+    <!-- ============ TELA MODO DE JOGO ============ -->
+    <div id="screen-mode" class="screen">
+        <h2 class="select-title">MODO DE JOGO</h2>
+        <div class="mode-grid">
+            <button class="mode-card" id="mode-hvh">
+                <span class="mode-icon">👥</span>
+                <span class="mode-label">Humano vs Humano</span>
+                <span class="mode-desc">2 jogadores no mesmo dispositivo</span>
+            </button>
+            <button class="mode-card" id="mode-hvc">
+                <span class="mode-icon">🤖</span>
+                <span class="mode-label">Humano vs CPU</span>
+                <span class="mode-desc">Enfrente o computador</span>
+            </button>
+            <button class="mode-card" id="mode-tournament">
+                <span class="mode-icon">🏆</span>
+                <span class="mode-label">Torneio</span>
+                <span class="mode-desc">Campeonato eliminatório</span>
+            </button>
+        </div>
+        <div class="turn-mode-selector">
+            <span class="turn-mode-title">Pedir a Palavra:</span>
+            <div class="turn-mode-options">
+                <label class="turn-mode-opt"><input type="radio" name="turnMode" value="buzzer" checked> 🔔
+                    Buzzer</label>
+                <label class="turn-mode-opt"><input type="radio" name="turnMode" value="parImparVirtual"> ✋
+                    Par/Ímpar</label>
+            </div>
+        </div>
+        <button class="btn-arcade btn-small btn-back-mode" id="btn-back-title">⬅ VOLTAR</button>
+    </div>
+
+    <!-- ============ TELA TORNEIO - CONFIGURAÇÃO ============ -->
+    <div id="screen-tournament-setup" class="screen">
+        <h2 class="select-title">TORNEIO</h2>
+        <div class="tournament-setup">
+            <div class="tournament-size-pick">
+                <button class="btn-arcade btn-blue" id="btn-t4">4 JOGADORES</button>
+                <button class="btn-arcade btn-green" id="btn-t8">8 JOGADORES</button>
+            </div>
+            <div id="tournament-register" class="tournament-register hidden">
+                <h3 class="tournament-reg-title" id="reg-title">Cadastro dos Jogadores</h3>
+                <div class="tournament-reg-form">
+                    <p class="tournament-char-label" id="reg-label">Jogador 1: Escolha o lutador</p>
+                    <div class="select-grid tournament-char-grid" id="tournament-char-grid"></div>
+                </div>
+                <div class="tournament-players-list" id="tournament-players-list"></div>
+            </div>
+            <button class="btn-arcade btn-small btn-back-mode" id="btn-back-mode-t">⬅ VOLTAR</button>
+        </div>
+    </div>
+
+    <!-- ============ TELA TORNEIO - BRACKET ============ -->
+    <div id="screen-tournament-bracket" class="screen">
+        <h2 class="select-title">🏆 CHAVE DO TORNEIO</h2>
+        <div class="bracket-container" id="bracket-container"></div>
+        <p class="bracket-info" id="bracket-info">Próxima luta carregando...</p>
+        <button class="btn-arcade btn-green" id="btn-next-match">PRÓXIMA LUTA ▶</button>
+        <button class="btn-arcade btn-small btn-back-mode" id="btn-exit-tournament">🚪 SAIR DO TORNEIO</button>
+    </div>
+
+    <!-- ============ TELA SELEÇÃO ============ -->
+    <div id="screen-select" class="screen">
+        <h2 class="select-title">SELECT YOUR FIGHTER</h2>
+        <div class="select-layout">
+            <div class="select-preview" id="preview-p1">
+                <span class="preview-label p1-color">P1</span>
+                <img id="preview-img-p1" src="" alt="">
+                <span class="preview-name" id="preview-name-p1">---</span>
+            </div>
+            <div class="select-grid" id="char-grid"></div>
+            <div class="select-preview" id="preview-p2">
+                <span class="preview-label p2-color">P2</span>
+                <img id="preview-img-p2" src="" alt="">
+                <span class="preview-name" id="preview-name-p2">---</span>
+            </div>
+        </div>
+        <p class="select-instruction" id="select-instruction">JOGADOR 1: Escolha o seu lutador!</p>
+        <button class="btn-arcade btn-green btn-confirm-fight hidden" id="btn-confirm-fight">⚔️ LUTAR!</button>
+        <button class="btn-arcade btn-small btn-back-mode" id="btn-back-select">⬅ VOLTAR</button>
+    </div>
+
+    <!-- ============ TELA LUTA ============ -->
+    <div id="screen-fight" class="screen">
+        <!-- VS Intro Overlay -->
+        <div id="vs-intro" class="vs-intro hidden">
+            <div class="vs-intro-p1">
+                <span class="vs-intro-label">PLAYER 1</span>
+                <span class="vs-intro-name" id="vs-name-p1">P1</span>
+            </div>
+            <div class="vs-intro-center">
+                <span class="vs-intro-vs">VS</span>
+            </div>
+            <div class="vs-intro-p2">
+                <span class="vs-intro-name" id="vs-name-p2">P2</span>
+                <span class="vs-intro-label">PLAYER 2</span>
+            </div>
+        </div>
+
+        <!-- Overlay anúncio FIGHT! -->
+        <div id="fight-announce" class="fight-announce hidden">
+            <span id="fight-announce-text" class="fight-announce-text">FIGHT!</span>
+        </div>
+
+        <!-- Special Cinematic Overlay -->
+        <div id="special-cinematic" class="special-cinematic hidden">
+            <div class="sc-bg"></div>
+            <div class="sc-char-name" id="sc-char-name"></div>
+            <div class="sc-move-name" id="sc-move-name"></div>
+            <div class="sc-level" id="sc-level"></div>
+            <div class="sc-particles" id="sc-particles"></div>
+        </div>
+
+        <!-- Botões de Controle (canto superior direito) -->
+        <div class="game-controls" id="game-controls">
+            <button class="gc-btn" id="btn-pause" title="Pausar">⏸</button>
+            <button class="gc-btn" id="btn-go-select" title="Voltar à Seleção">🔙</button>
+            <button class="gc-btn" id="btn-exit-game" title="Sair do Jogo">🚪</button>
+            <button class="gc-btn gc-btn-mute" id="btn-mute" title="Som">🔊</button>
+        </div>
+
+        <!-- Overlay de Pausa -->
+        <div class="pause-overlay hidden" id="pause-overlay">
+            <div class="pause-box">
+                <h2 class="pause-title">⏸ PAUSADO</h2>
+                <button class="btn-arcade btn-green" id="btn-resume">▶ CONTINUAR</button>
+                <button class="btn-arcade btn-blue" id="btn-pause-select">🔙 TROCAR LUTADORES</button>
+                <button class="btn-arcade btn-red" id="btn-pause-exit">🚪 SAIR DO JOGO</button>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div class="hud">
+            <div class="hud-player hud-p1">
+                <span class="hud-name" id="hud-name-p1">P1</span>
+                <div class="hp-bar-outer">
+                    <div class="hp-bar-inner hp-green" id="hp-bar-p1"></div>
+                </div>
+                <span class="hud-streak" id="hud-streak-p1">🔥0</span>
+            </div>
+            <div class="hud-vs">VS</div>
+            <div class="hud-player hud-p2">
+                <span class="hud-streak" id="hud-streak-p2">🔥0</span>
+                <div class="hp-bar-outer">
+                    <div class="hp-bar-inner hp-green" id="hp-bar-p2"></div>
+                </div>
+                <span class="hud-name" id="hud-name-p2">P2</span>
+            </div>
+        </div>
+
+        <!-- Canvas da Arena -->
+        <canvas id="arena-canvas"></canvas>
+
+        <!-- Pergunta -->
+        <div class="question-bar" id="question-bar">
+            <span id="question-text">Preparem-se!</span>
+        </div>
+
+        <!-- Timer Passa ou Repassa -->
+        <div class="buzzer-timer hidden" id="buzzer-timer">
+            <div class="buzzer-timer-bar" id="buzzer-timer-bar"></div>
+            <span class="buzzer-timer-text" id="buzzer-timer-text">10</span>
+        </div>
+
+        <!-- Overlay Par ou Ímpar -->
+        <div class="pi-overlay hidden" id="pi-overlay">
+            <div class="pi-title" id="pi-title">PAR OU ÍMPAR?</div>
+            <div class="pi-sides">
+                <div class="pi-side pi-side-p1" id="pi-side-p1">
+                    <span class="pi-player-name" id="pi-name-p1">P1</span>
+                    <div class="pi-choice" id="pi-choice-p1">
+                        <button class="pi-btn pi-par" data-choice="par" data-player="p1">PAR</button>
+                        <button class="pi-btn pi-impar" data-choice="impar" data-player="p1">ÍMPAR</button>
+                    </div>
+                    <div class="pi-numbers hidden" id="pi-numbers-p1">
+                        <button class="pi-num" data-num="1" data-player="p1">1</button>
+                        <button class="pi-num" data-num="2" data-player="p1">2</button>
+                        <button class="pi-num" data-num="3" data-player="p1">3</button>
+                        <button class="pi-num" data-num="4" data-player="p1">4</button>
+                        <button class="pi-num" data-num="5" data-player="p1">5</button>
+                    </div>
+                    <div class="pi-result hidden" id="pi-result-p1">?</div>
+                </div>
+                <div class="pi-vs">VS</div>
+                <div class="pi-side pi-side-p2" id="pi-side-p2">
+                    <span class="pi-player-name" id="pi-name-p2">P2</span>
+                    <div class="pi-choice" id="pi-choice-p2">
+                        <button class="pi-btn pi-par" data-choice="par" data-player="p2">PAR</button>
+                        <button class="pi-btn pi-impar" data-choice="impar" data-player="p2">ÍMPAR</button>
+                    </div>
+                    <div class="pi-numbers hidden" id="pi-numbers-p2">
+                        <button class="pi-num" data-num="1" data-player="p2">1</button>
+                        <button class="pi-num" data-num="2" data-player="p2">2</button>
+                        <button class="pi-num" data-num="3" data-player="p2">3</button>
+                        <button class="pi-num" data-num="4" data-player="p2">4</button>
+                        <button class="pi-num" data-num="5" data-player="p2">5</button>
+                    </div>
+                    <div class="pi-result hidden" id="pi-result-p2">?</div>
+                </div>
+            </div>
+            <div class="pi-reveal hidden" id="pi-reveal">
+                <span id="pi-sum-text"></span>
+                <span id="pi-winner-text"></span>
+            </div>
+        </div>
+
+        <!-- Overlay de Turno Buzzer -->
+        <div class="turn-reveal-overlay hidden" id="turn-reveal-overlay">
+            <h2 id="turn-reveal-name" class="turn-reveal-name">P1 VAI RESPONDER!</h2>
+        </div>
+
+        <!-- Controles Divididos -->
+        <div class="controls-split">
+            <div class="ctrl-half ctrl-p1" id="ctrl-p1">
+                <button class="buzzer-btn buzzer-p1" id="buzzer-p1">✋<br>PEDIR A<br>PALAVRA</button>
+                <div class="streak-meter" id="streak-meter-p1">
+                    <div class="streak-pips" id="streak-pips-p1"></div>
+                    <span class="streak-label" id="streak-label-p1"></span>
+                </div>
+                <div class="answers-grid hidden" id="answers-p1"></div>
+                <div class="attack-menu hidden" id="attack-menu-p1"></div>
+            </div>
+            <div class="ctrl-half ctrl-p2" id="ctrl-p2">
+                <button class="buzzer-btn buzzer-p2" id="buzzer-p2">✋<br>PEDIR A<br>PALAVRA</button>
+                <div class="streak-meter" id="streak-meter-p2">
+                    <div class="streak-pips" id="streak-pips-p2"></div>
+                    <span class="streak-label" id="streak-label-p2"></span>
+                </div>
+                <div class="answers-grid hidden" id="answers-p2"></div>
+                <div class="attack-menu hidden" id="attack-menu-p2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ TELA FIM ============ -->
+    <div id="screen-end" class="screen">
+        <div class="end-box">
+            <canvas id="confetti-canvas" class="confetti-layer"></canvas>
+            <h2 id="end-winner" class="end-winner-text">JOGADOR 1 VENCE!</h2>
+            <p id="end-method" class="end-method"></p>
+            <button id="btn-rematch" class="btn-arcade btn-green">JOGAR NOVAMENTE</button>
+            <button id="btn-reselect" class="btn-arcade btn-blue">TROCAR LUTADORES</button>
+            <button id="btn-end-exit" class="btn-arcade btn-red hidden">SAIR</button>
+        </div>
+    </div>
+
+    <script src="js/audio.js"></script>
+    <script src="js/math_kombat.js"></script>
 </body>
 
 </html>

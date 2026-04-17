@@ -29,7 +29,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Install dependencies
         run: npm install --no-fund --no-audit
@@ -37,8 +37,8 @@ jobs:
       - name: Prepare Web Directory
         run: |
           mkdir -p www
-          cp -r css js img mp3s www/ || echo "Some directories were not found, continuing."
-          cp math_kombat.html www/index.html
+          cp -r css js img mp3s www/ || echo "Some directories were missing, continuing."
+          cp index.html www/index.html
           echo "Web directory prepared."
 
       - name: Capacitor Sync
